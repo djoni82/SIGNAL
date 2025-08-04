@@ -29,6 +29,13 @@ def test_imports():
         print("❌ numpy import failed")
         return False
     
+    try:
+        import yaml
+        print("✅ pyyaml imported successfully")
+    except ImportError:
+        print("❌ pyyaml import failed")
+        return False
+    
     return True
 
 def test_config():
@@ -68,6 +75,21 @@ def test_telegram_config():
     
     return True
 
+def test_api_connectivity():
+    """Test basic API connectivity"""
+    try:
+        import requests
+        response = requests.get('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT', timeout=10)
+        if response.status_code == 200:
+            print("✅ Binance API connectivity OK")
+            return True
+        else:
+            print(f"❌ Binance API returned status {response.status_code}")
+            return False
+    except Exception as e:
+        print(f"❌ Binance API connectivity failed: {e}")
+        return False
+
 def main():
     """Main test function"""
     print("🧪 Running CryptoAlphaPro Signal Bot tests...")
@@ -76,7 +98,8 @@ def main():
     tests = [
         ("Import Test", test_imports),
         ("Config Test", test_config),
-        ("Telegram Config Test", test_telegram_config)
+        ("Telegram Config Test", test_telegram_config),
+        ("API Connectivity Test", test_api_connectivity)
     ]
     
     passed = 0

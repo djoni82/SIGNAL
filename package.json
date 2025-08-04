@@ -2,10 +2,10 @@
   "name": "cryptoalpha-signal-bot",
   "version": "1.0.0",
   "description": "CryptoAlphaPro Signal Bot - Advanced AI trading signals",
-  "main": "index.js",
+  "main": "index.html",
   "scripts": {
-    "build": "echo 'Build completed'",
-    "start": "echo 'Server started'",
+    "build": "echo 'Static site - no build required'",
+    "start": "echo 'Static site - no server required'",
     "test": "echo 'Tests passed'"
   },
   "keywords": [
