@@ -516,25 +516,52 @@ class EnhancedSignalGenerator:
         
         emoji = emoji_map.get(signal, '❓')
         
-        return f"""
-{emoji} <b>{signal} {symbol}</b>
-
-💰 <b>Entry Price:</b> {self.format_price(price)}
-📈 <b>24h Change:</b> {change_24h:.2f}%
-🎯 <b>Confidence:</b> {confidence*100:.0f}%
-⚡ <b>Leverage:</b> {leverage}x
-🏢 <b>Exchanges:</b> {exchanges_count}
-
-📰 <b>News Sentiment:</b> {news_sentiment:.0f}%
-🔗 <b>On-chain Sentiment:</b> {onchain_sentiment*100:.0f}%
-🐦 <b>Twitter Sentiment:</b> {twitter_sentiment:.0f}%
-
-🛡️ <b>Stop Loss:</b> {self.format_price(stop_loss)}
-🎯 <b>Take Profit:</b> {self.format_price(take_profit)}
-
-⏰ {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-🤖 CryptoAlphaPro Enhanced v3.0
-        """
+        # Определяем тип позиции
+        if signal in ['STRONG_BUY', 'BUY']:
+            position_type = "ДЛИННУЮ ПОЗИЦИЮ"
+            action_emoji = "🚀"
+        elif signal in ['STRONG_SELL', 'SELL']:
+            position_type = "КОРОТКУЮ ПОЗИЦИЮ"
+            action_emoji = "📉"
+        else:
+            position_type = "ПОЗИЦИЮ"
+            action_emoji = "➡️"
+        
+        # Рассчитываем процентные изменения
+        sl_percent = abs((stop_loss - price) / price * 100)
+        tp_percent = abs((take_profit - price) / price * 100)
+        
+        message = f"🚨 **СИГНАЛ НА {position_type}** {action_emoji}\n\n"
+        message += f"**Пара:** {symbol}\n"
+        message += f"**Действие:** {signal}\n"
+        message += f"**Цена входа:** ${price:.6f}\n\n"
+        
+        # Take Profit уровни
+        message += "**🎯 Take Profit:**\n"
+        message += f"TP1: ${take_profit:.6f} (+{tp_percent:.1f}%)\n\n"
+        
+        # Stop Loss
+        message += f"**🛑 Stop Loss:** ${stop_loss:.6f} ({sl_percent:.1f}%)\n\n"
+        
+        # Дополнительная информация
+        message += f"**📊 Уровень успеха:** {confidence*100:.0f}%\n"
+        message += f"**⚡ Leverage:** {leverage}x\n"
+        message += f"**🏢 Exchanges:** {exchanges_count}\n"
+        message += f"**📈 24h Change:** {change_24h:.2f}%\n\n"
+        
+        # Анализ настроений
+        message += "**🔎 АНАЛИЗ НАСТРОЕНИЙ:**\n"
+        message += f"📰 **News Sentiment:** {news_sentiment:.0f}%\n"
+        message += f"🔗 **On-chain Sentiment:** {onchain_sentiment*100:.0f}%\n"
+        message += f"🐦 **Twitter Sentiment:** {twitter_sentiment:.0f}%\n\n"
+        
+        # Время и подпись
+        message += f"**🕒 Время:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        message += "**📈 CryptoAlphaPro Enhanced v3.0**\n"
+        message += "Система 'Best Alpha Only' - только лучшие сигналы!\n"
+        message += "⚠️ **Риск-менеджмент обязателен!**"
+        
+        return message
     
     async def generate_signal_for_symbol(self, symbol: str) -> Optional[Dict]:
         """Генерация расширенного сигнала для одного символа"""
@@ -645,29 +672,66 @@ class EnhancedSignalGenerator:
         return signals
     
     async def run_continuous_monitoring(self, pairs: List[str] = None, interval: int = 300):
-        """Непрерывный мониторинг"""
+        """Непрерывный мониторинг с отправкой в Telegram"""
         if pairs is None:
             pairs = self.default_pairs
         
         self.running = True
+        telegram = TelegramController()
+        
         print(f"🚀 Starting enhanced monitoring for {len(pairs)} pairs")
         print(f"⏰ Interval: {interval} seconds")
         print(f"📰 News API: Active")
         print(f"🔗 On-chain API: Active")
         print(f"🐦 Twitter API: Active")
         print(f"⚡ Leverage range: 1x-50x")
+        print(f"📱 Telegram: Active")
+        
+        # Отправляем сообщение о запуске
+        telegram.send_message("🚀 **ENHANCED CRYPTOALPHAPRO BOT v3.0 STARTED**\n\n"
+                            "⚡ Multi-exchange data: ACTIVE\n"
+                            "🤖 AI Engine: RUNNING\n"
+                            "📰 News API: ACTIVE\n"
+                            "🔗 On-chain API: ACTIVE\n"
+                            "🐦 Twitter API: ACTIVE\n"
+                            "⚡ Leverage: 1x-50x\n"
+                            "📱 Telegram: ACTIVE\n\n"
+                            "🎯 Ready for professional trading!")
+        
+        cycle_count = 0
         
         while self.running:
             try:
-                print(f"\n📊 Processing {len(pairs)} pairs with full analysis...")
+                cycle_count += 1
+                print(f"\n📊 Cycle #{cycle_count}: Processing {len(pairs)} pairs with full analysis...")
                 signals = await self.generate_signals_for_pairs(pairs)
                 
                 if signals:
                     print(f"✅ Generated {len(signals)} enhanced signals")
+                    
+                    # Отправляем каждый сигнал в Telegram
+                    for signal in signals:
+                        if signal.get('confidence', 0) > 0.5:  # Только сигналы с уверенностью > 50%
+                            message = self.format_signal_message(signal)
+                            if telegram.send_message(message):
+                                print(f"📤 Signal for {signal.get('symbol', 'UNKNOWN')} sent to Telegram")
+                            else:
+                                print(f"❌ Failed to send signal for {signal.get('symbol', 'UNKNOWN')}")
                 else:
                     print("ℹ️ No signals generated")
                 
                 print(f"📈 Stats: {self.stats['signals_generated']} total signals")
+                
+                # Отправляем статус каждые 10 циклов
+                if cycle_count % 10 == 0:
+                    status_message = f"📊 **ENHANCED BOT v3.0 STATUS**\n\n"
+                    status_message += f"🔄 Cycle: #{cycle_count}\n"
+                    status_message += f"📈 Total signals: {self.stats['signals_generated']}\n"
+                    status_message += f"❌ Errors: {self.stats['errors']}\n"
+                    status_message += f"⏰ Next cycle: {interval} seconds\n"
+                    status_message += f"🤖 Status: ACTIVE"
+                    
+                    telegram.send_message(status_message)
                 
                 # Ждем до следующего цикла
                 await asyncio.sleep(interval)
@@ -675,6 +739,10 @@ class EnhancedSignalGenerator:
             except Exception as e:
                 print(f"❌ Error in monitoring cycle: {e}")
                 self.stats['errors'] += 1
+                
+                # Отправляем ошибку в Telegram
+                telegram.send_message(f"❌ **BOT ERROR**\n\nError: {str(e)}\nCycle: #{cycle_count}")
+                
                 await asyncio.sleep(60)
     
     def stop_monitoring(self):

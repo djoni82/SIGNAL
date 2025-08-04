@@ -61,6 +61,11 @@ class DataValidator:
     def validate_24h_change(change: float) -> bool:
         """Проверка реалистичности 24h изменения"""
         return -50.0 <= change <= 100.0
+    
+    @staticmethod
+    def validate_volume(volume: float) -> bool:
+        """Проверка реалистичности объема"""
+        return volume > 0 and volume < 1000000000  # Менее 1 млрд
 
 class ExchangeDataCollector:
     """Сбор РЕАЛЬНЫХ данных с бирж"""
@@ -98,8 +103,8 @@ class ExchangeDataCollector:
                     'low_24h': float(data['lowPrice'])
                 }
         except Exception as e:
-            print(f"❌ Binance error for {symbol}: {e}")
-        return {}
+            print(f"❌ Ошибка получения данных Binance для {symbol}: {e}")
+            return {}
     
     @staticmethod
     def get_bybit_data(symbol: str) -> Dict:
@@ -113,7 +118,7 @@ class ExchangeDataCollector:
             if response.status_code == 200:
                 data = response.json()
                 
-                if data['result']['list']:
+                if data['retCode'] == 0 and data['result']['list']:
                     ticker = data['result']['list'][0]
                     
                     price = float(ticker['lastPrice'])
@@ -137,8 +142,8 @@ class ExchangeDataCollector:
                         'low_24h': float(ticker['lowPrice24h'])
                     }
         except Exception as e:
-            print(f"❌ Bybit error for {symbol}: {e}")
-        return {}
+            print(f"❌ Ошибка получения данных Bybit для {symbol}: {e}")
+            return {}
     
     @staticmethod
     def get_okx_data(symbol: str) -> Dict:
@@ -146,18 +151,17 @@ class ExchangeDataCollector:
         try:
             # Правильный формат символа для OKX
             okx_symbol = symbol.replace('/', '-')
-            url = f"https://www.okx.com/api/v5/market/tickers?instType=SPOT&instId={okx_symbol}"
+            url = f"https://www.okx.com/api/v5/market/ticker?instId={okx_symbol}-SPOT"
             
             response = requests.get(url, timeout=10)
             if response.status_code == 200:
                 data = response.json()
                 
-                if data['data']:
+                if data['code'] == '0' and data['data']:
                     ticker = data['data'][0]
                     
                     price = float(ticker['last'])
-                    # ИСПРАВЛЕНИЕ: используем правильное поле для изменения цены
-                    change_24h = float(ticker.get('change24h', ticker.get('priceChangePercent', 0))) * 100
+                    change_24h = float(ticker['change24h']) * 100
                     volume = float(ticker['vol24h'])
                     
                     # Валидация данных
@@ -177,8 +181,8 @@ class ExchangeDataCollector:
                         'low_24h': float(ticker['low24h'])
                     }
         except Exception as e:
-            print(f"❌ OKX error for {symbol}: {e}")
-        return {}
+            print(f"❌ Ошибка получения данных OKX для {symbol}: {e}")
+            return {}
 
 class AIAnalyzer:
     """РЕАЛЬНЫЙ AI анализатор"""
