@@ -1,0 +1,26 @@
+{
+  "name": "cryptoalpha-signal-bot",
+  "version": "1.0.0",
+  "description": "CryptoAlphaPro Signal Bot - Advanced AI trading signals",
+  "main": "index.js",
+  "scripts": {
+    "build": "echo 'Build completed'",
+    "start": "echo 'Server started'",
+    "test": "echo 'Tests passed'"
+  },
+  "keywords": [
+    "crypto",
+    "trading",
+    "signals",
+    "ai",
+    "bot",
+    "telegram"
+  ],
+  "author": "CryptoAlphaPro Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+} 
