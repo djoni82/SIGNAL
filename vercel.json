@@ -16,5 +16,7 @@
     "NODE_ENV": "production"
   },
   "functions": {},
-  "outputDirectory": "."
+  "outputDirectory": ".",
+  "buildCommand": "echo 'No build required for static site'",
+  "installCommand": "echo 'No dependencies to install'"
 } 

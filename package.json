@@ -4,10 +4,9 @@
   "description": "CryptoAlphaPro Signal Bot - Advanced AI trading signals",
   "main": "index.html",
   "scripts": {
-    "build": "bash vercel-build.sh",
+    "build": "echo 'Static site - no build required'",
     "start": "echo 'Static site - no server required'",
-    "test": "echo 'Tests passed'",
-    "vercel-build": "bash vercel-build.sh"
+    "test": "echo 'Tests passed'"
   },
   "keywords": [
     "crypto",
