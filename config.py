@@ -7,6 +7,7 @@ Configuration - Конфигурация для CryptoAlphaPro Bot
 TELEGRAM_CONFIG = {
     'bot_token': '8243982780:AAHb72Vjf76iIbiS-khO0dLhkmgvsbKKobg',
     'chat_id': '5333574230',
+    'admin_chat_id': '5333574230',  # Админский чат для управления ботом
     'enable_telegram': True,  # Включить/выключить Telegram
     'send_signals': True,  # Отправлять сигналы
     'send_status': True,  # Отправлять статус
@@ -26,7 +27,7 @@ EXCHANGE_KEYS = {
     'okx': {
         'key': 'a7f94985-9865-495f-a3f9-e681ab17492d',
         'secret': '5BE33E5B1802F25F08D28D902EB71970',
-        'passphrase': 'Baks1982'
+        'passphrase': 'Baks1982.'
     }
 }
 
@@ -34,89 +35,69 @@ EXCHANGE_KEYS = {
 EXTERNAL_APIS = {
     'dune': {
         'api_key': 'IpFMlwUDxk9AhUdfgF6vVfvKcldTfF2ay',
-        'query_id': 5341077
+        'query_id': 5341077,
+        'base_url': 'https://api.dune.com/api/v1'
     },
     'crypto_panic': {
         'api_key': '875f9eb195992389523bcf015c95f315245e395e',
         'base_url': 'https://cryptopanic.com/api/developer/v2'
     },
     'twitter': {
+        'api_key': 'your_twitter_api_key_here',
+        'api_secret': 'your_twitter_api_secret_here',
+        'bearer_token': 'your_twitter_bearer_token_here',
         'app_id': '31291794'
+    },
+    'coingecko': {
+        'api_key': 'CG-your-api-key-here',
+        'base_url': 'https://api.coingecko.com/api/v3'
     }
 }
 
 # Торговые настройки
 TRADING_CONFIG = {
     'pairs': [
-        'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'ADA/USDT', 'SOL/USDT',
-        'DOT/USDT', 'LINK/USDT', 'MATIC/USDT', 'AVAX/USDT', 'ATOM/USDT',
-        'XRP/USDT', 'LTC/USDT', 'BCH/USDT', 'EOS/USDT', 'TRX/USDT',
-        'XLM/USDT', 'VET/USDT', 'THETA/USDT', 'FIL/USDT', 'NEAR/USDT',
-        'ALGO/USDT', 'ICP/USDT', 'FTM/USDT', 'SAND/USDT', 'MANA/USDT',
-        'GALA/USDT', 'AXS/USDT', 'CHZ/USDT', 'HOT/USDT', 'ENJ/USDT',
-        'BAT/USDT', 'ZIL/USDT', 'DASH/USDT', 'XMR/USDT', 'ZEC/USDT',
-        'NEO/USDT', 'QTUM/USDT', 'IOTA/USDT', 'XTZ/USDT', 'HBAR/USDT',
-        'ONE/USDT', 'EGLD/USDT', 'FLOW/USDT', 'KSM/USDT', 'MKR/USDT',
-        'COMP/USDT', 'AAVE/USDT', 'UNI/USDT', 'SUSHI/USDT', 'CRV/USDT',
-        'YFI/USDT', 'SNX/USDT', 'BAL/USDT', 'REN/USDT', 'ZRX/USDT',
-        'BAND/USDT', 'OCEAN/USDT', 'ALPHA/USDT', 'AUDIO/USDT', 'STORJ/USDT',
-        'ANKR/USDT', 'CTSI/USDT', 'AR/USDT', 'RLC/USDT', 'SKL/USDT',
-        'GRT/USDT', '1INCH/USDT', 'LRC/USDT', 'OMG/USDT', 'ZEN/USDT',
-        'RVN/USDT', 'HIVE/USDT', 'STEEM/USDT', 'WAVES/USDT', 'DCR/USDT',
-        'ETC/USDT', 'DOGE/USDT', 'SHIB/USDT', 'M/USDT', 'PEPE/USDT',
-        'FLOKI/USDT', 'BONK/USDT', 'WIF/USDT', 'JUP/USDT', 'PYTH/USDT',
-        'JTO/USDT', 'BOME/USDT', 'SLERF/USDT', 'POPCAT/USDT', 'BOOK/USDT',
-        'MYRO/USDT', 'WEN/USDT', 'CAT/USDT', 'DOG/USDT', 'MOON/USDT',
-        'ROCKET/USDT', 'LAMBO/USDT', 'DIAMOND/USDT', 'GOLD/USDT', 'SILVER/USDT',
-        'PLATINUM/USDT', 'EMERALD/USDT', 'RUBY/USDT', 'SAPPHIRE/USDT', 'OPAL/USDT',
-        'JADE/USDT', 'PEARL/USDT', 'CRYSTAL/USDT', 'GEM/USDT', 'STAR/USDT',
-        'SUN/USDT', 'EARTH/USDT', 'MARS/USDT', 'VENUS/USDT', 'JUPITER/USDT',
-        'SATURN/USDT', 'URANUS/USDT', 'NEPTUNE/USDT', 'PLUTO/USDT', 'MERCURY/USDT',
-        'GALAXY/USDT', 'UNIVERSE/USDT', 'COSMOS/USDT', 'NEBULA/USDT', 'QUASAR/USDT',
-        'PULSAR/USDT', 'BLACKHOLE/USDT', 'WORMHOLE/USDT', 'PORTAL/USDT', 'GATE/USDT',
-        'BRIDGE/USDT', 'TUNNEL/USDT', 'PATH/USDT', 'ROAD/USDT', 'HIGHWAY/USDT',
-        'EXPRESSWAY/USDT', 'AUTOBAHN/USDT', 'FREEWAY/USDT', 'BOULEVARD/USDT', 'AVENUE/USDT',
-        'STREET/USDT', 'LANE/USDT', 'DRIVE/USDT', 'COURT/USDT', 'PLAZA/USDT',
-        'SQUARE/USDT', 'CIRCLE/USDT', 'TRIANGLE/USDT', 'HEART/USDT', 'SPADE/USDT',
-        'CLUB/USDT', 'ACE/USDT', 'KING/USDT', 'QUEEN/USDT', 'JACK/USDT',
-        'JOKER/USDT', 'WILD/USDT', 'BONUS/USDT', 'MEGA/USDT', 'SUPER/USDT',
-        'ULTRA/USDT', 'EXTREME/USDT', 'MAXIMUM/USDT', 'INFINITY/USDT', 'ETERNAL/USDT',
-        'IMMORTAL/USDT', 'LEGENDARY/USDT', 'MYTHICAL/USDT', 'DIVINE/USDT', 'CELESTIAL/USDT',
-        'ANGELIC/USDT', 'DEMONIC/USDT', 'MAGICAL/USDT', 'MYSTICAL/USDT', 'ENCHANTED/USDT',
-        'CURSED/USDT', 'BLESSED/USDT', 'HOLY/USDT', 'SACRED/USDT', 'PROPHETIC/USDT',
-        'ORACULAR/USDT', 'AUGURAL/USDT', 'PREDICTIVE/USDT', 'FORECAST/USDT', 'PROGNOSIS/USDT',
-        'DIAGNOSIS/USDT', 'ANALYSIS/USDT', 'RESEARCH/USDT', 'STUDY/USDT', 'EXAMINATION/USDT',
-        'INVESTIGATION/USDT', 'EXPLORATION/USDT', 'DISCOVERY/USDT', 'INVENTION/USDT', 'INNOVATION/USDT',
-        'CREATION/USDT', 'GENERATION/USDT', 'PRODUCTION/USDT', 'MANUFACTURE/USDT', 'ASSEMBLY/USDT',
-        'CONSTRUCTION/USDT', 'BUILDING/USDT', 'DEVELOPMENT/USDT', 'GROWTH/USDT', 'EXPANSION/USDT',
-        'EXTENSION/USDT', 'ENLARGEMENT/USDT', 'AMPLIFICATION/USDT', 'MAGNIFICATION/USDT', 'INTENSIFICATION/USDT',
-        'ACCELERATION/USDT', 'BOOST/USDT', 'PUSH/USDT', 'DRIVE/USDT', 'PROPEL/USDT',
-        'THRUST/USDT', 'LAUNCH/USDT', 'BLAST/USDT', 'EXPLOSION/USDT', 'DETONATION/USDT',
-        'IGNITION/USDT', 'COMBUSTION/USDT', 'FIRE/USDT', 'FLAME/USDT', 'BLAZE/USDT',
-        'INFERNO/USDT', 'VOLCANO/USDT', 'ERUPTION/USDT', 'TORNADO/USDT', 'HURRICANE/USDT',
-        'CYCLONE/USDT', 'TYPHOON/USDT', 'STORM/USDT', 'THUNDER/USDT', 'LIGHTNING/USDT',
-        'ELECTRICITY/USDT', 'POWER/USDT', 'ENERGY/USDT', 'FORCE/USDT', 'STRENGTH/USDT',
-        'MIGHT/USDT', 'DOMINANCE/USDT', 'SUPREMACY/USDT', 'LEADERSHIP/USDT', 'GUIDANCE/USDT',
-        'DIRECTION/USDT', 'NAVIGATION/USDT', 'PILOTAGE/USDT', 'STEERING/USDT', 'CONTROL/USDT',
-        'MANAGEMENT/USDT', 'ADMINISTRATION/USDT', 'GOVERNANCE/USDT', 'RULERSHIP/USDT', 'SOVEREIGNTY/USDT',
-        'AUTHORITY/USDT', 'JURISDICTION/USDT', 'TERRITORY/USDT', 'DOMAIN/USDT', 'REALM/USDT',
-        'EMPIRE/USDT', 'KINGDOM/USDT', 'PRINCIPALITY/USDT', 'DUCHY/USDT', 'COUNTY/USDT',
-        'PROVINCE/USDT', 'REGION/USDT', 'ZONE/USDT', 'SECTOR/USDT', 'AREA/USDT',
-        'SPACE/USDT', 'DIMENSION/USDT', 'REALITY/USDT', 'EXISTENCE/USDT', 'BEING/USDT',
-        'ENTITY/USDT', 'CREATURE/USDT', 'ORGANISM/USDT', 'LIFE/USDT', 'VITALITY/USDT',
-        'VIGOR/USDT', 'VIBRANCY/USDT', 'DYNAMISM/USDT', 'ACTIVITY/USDT', 'MOVEMENT/USDT',
-        'MOTION/USDT', 'ACTION/USDT', 'OPERATION/USDT', 'FUNCTION/USDT', 'PERFORMANCE/USDT',
-        'EXECUTION/USDT', 'IMPLEMENTATION/USDT', 'DEPLOYMENT/USDT', 'INITIATION/USDT', 'START/USDT',
-        'BEGINNING/USDT', 'COMMENCEMENT/USDT', 'ORIGIN/USDT', 'SOURCE/USDT', 'ROOT/USDT',
-        'FOUNDATION/USDT', 'BASE/USDT', 'GROUND/USDT', 'FLOOR/USDT', 'CEILING/USDT',
-        'ROOF/USDT', 'SKY/USDT', 'HEAVEN/USDT', 'PARADISE/USDT', 'UTOPIA/USDT',
-        'EDEN/USDT', 'GARDEN/USDT', 'FOREST/USDT', 'JUNGLE/USDT', 'SAVANNA/USDT',
-        'DESERT/USDT', 'OCEAN/USDT', 'SEA/USDT', 'LAKE/USDT', 'RIVER/USDT',
-        'STREAM/USDT', 'CREEK/USDT', 'BROOK/USDT', 'SPRING/USDT', 'WELL/USDT',
-        'FOUNTAIN/USDT', 'WATERFALL/USDT', 'CASCADE/USDT', 'RAPIDS/USDT', 'WHIRLPOOL/USDT',
-        'VORTEX/USDT', 'SPIRAL/USDT', 'HELIX/USDT', 'COIL/USDT', 'RING/USDT',
-        'LOOP/USDT', 'CYCLE/USDT', 'ROTATION/USDT', 'REVOLUTION/USDT', 'ORBIT/USDT',
-        'TRAJECTORY/USDT', 'ROUTE/USDT', 'WAY/USDT'
+        # Топ криптовалюты
+        'BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'XRP/USDT', 'ADA/USDT',
+        'SOL/USDT', 'DOGE/USDT', 'TRX/USDT', 'MATIC/USDT', 'LTC/USDT',
+        'DOT/USDT', 'SHIB/USDT', 'AVAX/USDT', 'ATOM/USDT', 'UNI/USDT',
+        'LINK/USDT', 'BCH/USDT', 'XLM/USDT', 'ICP/USDT', 'FIL/USDT',
+        'ETC/USDT', 'HBAR/USDT', 'VET/USDT', 'ALGO/USDT', 'NEAR/USDT',
+        
+        # DeFi токены
+        'AAVE/USDT', 'MKR/USDT', 'COMP/USDT', 'YFI/USDT', 'SNX/USDT',
+        'CRV/USDT', 'SUSHI/USDT', '1INCH/USDT', 'BAL/USDT', 'ZRX/USDT',
+        'LRC/USDT', 'REN/USDT', 'BAND/USDT', 'ALPHA/USDT', 'GRT/USDT',
+        
+        # Layer 2 и альткоины
+        'FTM/USDT', 'ONE/USDT', 'EGLD/USDT', 'FLOW/USDT', 'KSM/USDT',
+        'THETA/USDT', 'SAND/USDT', 'MANA/USDT', 'GALA/USDT', 'AXS/USDT',
+        'ENJ/USDT', 'CHZ/USDT', 'BAT/USDT', 'ZIL/USDT', 'HOT/USDT',
+        
+        # Privacy coins
+        'XMR/USDT', 'ZEC/USDT', 'DASH/USDT',
+        
+        # Старые альткоины
+        'NEO/USDT', 'QTUM/USDT', 'IOTA/USDT', 'XTZ/USDT', 'EOS/USDT',
+        'WAVES/USDT', 'DCR/USDT', 'RVN/USDT', 'ZEN/USDT', 'OMG/USDT',
+        
+        # Новые проекты
+        'JUP/USDT', 'PYTH/USDT', 'JTO/USDT', 'WIF/USDT', 'BONK/USDT',
+        'BOME/USDT', 'PEPE/USDT', 'FLOKI/USDT', 'WEN/USDT',
+        
+        # Дополнительные пары
+        'STORJ/USDT', 'ANKR/USDT', 'CTSI/USDT', 'AR/USDT', 'RLC/USDT',
+        'SKL/USDT', 'OCEAN/USDT', 'AUDIO/USDT', 'HIVE/USDT', 'STEEM/USDT',
+        
+        # Мемкоины и популярные
+        'CAT/USDT', 'POPCAT/USDT', 'MYRO/USDT', 'SLERF/USDT', 'BOOK/USDT',
+        
+        # Дополнительные альткоины до 100
+        'RNDR/USDT', 'GRT/USDT', 'IMX/USDT', 'LPT/USDT', 'ENS/USDT',
+        'APE/USDT', 'GMT/USDT', 'GST/USDT', 'STEPN/USDT', 'ANC/USDT',
+        'LUNA/USDT', 'UST/USDT', 'MIRROR/USDT', 'RUNE/USDT', 'THOR/USDT',
+        'CAKE/USDT', 'AUTO/USDT', 'BAKE/USDT', 'BNX/USDT', 'TLM/USDT',
+        'SLP/USDT', 'PYR/USDT', 'GHST/USDT', 'QUICK/USDT', 'DYDX/USDT'
     ],
     'timeframes': ['15m', '1h', '4h', '1d'],
     'update_frequency': 300,  # 5 минут
