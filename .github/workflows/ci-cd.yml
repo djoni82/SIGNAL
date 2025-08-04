@@ -32,7 +32,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install -r requirements-prod.txt
     
     - name: Run tests
       run: |
@@ -99,7 +99,7 @@ jobs:
         name: security-results
         path: |
           README.md
-          requirements.txt
+          requirements-prod.txt
         retention-days: 7
 
   documentation:
