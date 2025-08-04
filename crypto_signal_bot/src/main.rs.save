@@ -1,0 +1,448 @@
+	`````se async_trait::async_trait;
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use serde_json;
+use std::env;
+use std::error::Error;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::time::{sleep, Duration};
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+use futures::StreamExt;
+use log::{info, error};
+
+// Определение структур и трейтов
+
+#[derive(Debug)]
+enum Side {
+    Buy,
+    Sell,
+}
+
+#[derive(Debug)]
+struct Order {
+    id: String,
+    symbol: String,
+    side: Side,
+    price: f64,
+    amount: f64,
+}
+
+#[derive(Debug)]
+struct OrderBook {
+    bids: Vec<(f64, f64)>,
+    asks: Vec<(f64, f64)>,
+}
+
+#[async_trait]
+trait Exchange: Send + Sync {
+    fn name(&self) -> &str;
+    async fn connect(&self) -> Result<(), Box<dyn Error>>;
+    async fn get_price(&self, symbol: &str) -> Result<f64, Box<dyn Error>>;
+    async fn place_limit_order(
+        &self,
+        symbol: &str,
+        side: Side,
+        price: f64,
+        amount: f64,
+    ) -> Result<Order, Box<dyn Error>>;
+    async fn cancel_order(&self, order_id: &str) -> Result<(), Box<dyn Error>>;
+    async fn get_order_book(&self, symbol: &str) -> Result<OrderBook, Box<dyn Error>>;
+    async fn get_trading_pairs(&self) -> Result<Vec<String>, Box<dyn Error>>;
+    async fn start_price_stream(&self, symbol: &str);
+}
+
+// Реализация для Binance
+
+struct Binance {
+    api_key: String,
+    api_secret: String,
+    client: Client,
+    price: Arc<Mutex<f64>>,
+}
+
+impl Binance {
+    fn new(api_key: String, api_secret: String) -> Self {
+        Self {
+            api_key,
+            api_secret,
+            client: Client::new(),
+            price: Arc::new(Mutex::new(0.0)),
+        }
+    }
+}
+
+#[async_trait]
+impl Exchange for Binance {
+    fn name(&self) -> &str {
+        "Binance"
+    }
+
+    async fn connect(&self) -> Result<(), Box<dyn Error>> {
+        info!("Connected to Binance");
+        Ok(())
+    }
+
+    async fn get_price(&self, _symbol: &str) -> Result<f64, Box<dyn Error>> {
+        let price = *self.price.lock().await;
+        Ok(price)
+    }
+
+    async fn place_limit_order(
+        &self,
+        symbol: &str,
+        side: Side,
+        price: f64,
+        amount: f64,
+    ) -> Result<Order, Box<dyn Error>> {
+        let side_str = match side {
+            Side::Buy => "BUY",
+            Side::Sell => "SELL",
+        };
+        let url = "https://api.binance.com/api/v3/order";
+        let params = vec![
+            ("symbol", symbol),
+            ("side", side_str),
+            ("type", "LIMIT"),
+            ("timeInForce", "GTC"),
+            ("quantity", &amount.to_string()),
+            ("price", &price.to_string()),
+        ];
+        let response = self
+            .client
+            .post(url)
+            .header("X-MBX-APIKEY", &self.api_key)
+            .form(&params) // Исправлено: params вместо ¶ms
+            .send()
+            .await?;
+        let data: serde_json::Value = response.json().await?;
+        Ok(Order {
+            id: data["orderId"].to_string(),
+            symbol: symbol.to_string(),
+            side,
+            price,
+            amount,
+        })
+    }
+
+    async fn cancel_order(&self, order_id: &str) -> Result<(), Box<dyn Error>> {
+        let url = "https://api.binance.com/api/v3/order";
+        let params = vec![("orderId", order_id)];
+        self.client
+            .delete(url)
+            .header("X-MBX-APIKEY", &self.api_key)
+            .form(&params) // Исправлено: params вместо ¶ms
+            .send()
+            .await?;
+        Ok(())
+    }
+
+    async fn get_order_book(&self, symbol: &str) -> Result<OrderBook, Box<dyn Error>> {
+        let url = format!("https://api.binance.com/api/v3/depth?symbol={}&limit=10", symbol);
+        let response = self.client.get(&url).send().await?;
+        let data: serde_json::Value = response.json().await?;
+        let bids: Vec<(f64, f64)> = data["bids"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| {
+                let price = entry[0].as_str().unwrap().parse::<f64>().unwrap();
+                let amount = entry[1].as_str().unwrap().parse::<f64>().unwrap();
+                (price, amount)
+            })
+            .collect();
+        let asks: Vec<(f64, f64)> = data["asks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| {
+                let price = entry[0].as_str().unwrap().parse::<f64>().unwrap();
+                let amount = entry[1].as_str().unwrap().parse::<f64>().unwrap();
+                (price, amount)
+            })
+            .collect();
+        Ok(OrderBook { bids, asks })
+    }
+
+    async fn get_trading_pairs(&self) -> Result<Vec<String>, Box<dyn Error>> {
+        let url = "https://api.binance.com/api/v3/exchangeInfo";
+        let response = self.client.get(url).send().await?;
+        let data: serde_json::Value = response.json().await?;
+        let pairs: Vec<String> = data["symbols"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|symbol| symbol["symbol"].as_str().unwrap().to_string())
+            .collect();
+        Ok(pairs)
+    }
+
+    async fn start_price_stream(&self, symbol: &str) {
+        let ws_url = format!("wss://stream.binance.com:9443/ws/{}@ticker", symbol.to_lowercase());
+        let (mut ws_stream, _) = connect_async(&ws_url).await.unwrap();
+        let price = Arc::clone(&self.price);
+        while let Some(msg) = ws_stream.next().await {
+            if let Ok(Message::Text(text)) = msg {
+                if let Ok(data) = serde_json::from_str::<serde_json::Value>(&text) {
+                    if let Some(price_str) = data["c"].as_str() {
+                        let mut price_lock = price.lock().await;
+                        *price_lock = price_str.parse::<f64>().unwrap_or(*price_lock);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Реализация для Bybit
+
+struct Bybit {
+    api_key: String,
+    api_secret: String,
+    client: Client,
+    price: Arc<Mutex<f64>>,
+}
+
+impl Bybit {
+    fn new(api_key: String, api_secret: String) -> Self {
+        Self {
+            api_key,
+            api_secret,
+            client: Client::new(),
+            price: Arc::new(Mutex::new(0.0)),
+        }
+    }
+}
+
+#[async_trait]
+impl Exchange for Bybit {
+    fn name(&self) -> &str {
+        "Bybit"
+    }
+
+    async fn connect(&self) -> Result<(), Box<dyn Error>> {
+        info!("Connected to Bybit");
+        Ok(())
+    }
+
+    async fn get_price(&self, _symbol: &str) -> Result<f64, Box<dyn Error>> {
+        let price = *self.price.lock().await;
+        Ok(price)
+    }
+
+    async fn place_limit_order(
+        &self,
+        symbol: &str,
+        side: Side,
+        price: f64,
+        amount: f64,
+    ) -> Result<Order, Box<dyn Error>> {
+        let url = "https://api.bybit.com/v2/private/order/create";
+        let params = serde_json::json!({
+            "api_key": self.api_key,
+            "symbol": symbol,
+            "side": match side {
+                Side::Buy => "Buy",
+                Side::Sell => "Sell",
+            },
+            "order_type": "Limit",
+            "qty": amount,
+            "price": price,
+            "time_in_force": "GoodTillCancel",
+        });
+        let response = self.client.post(url).json(&params).send().await?;
+        let data: serde_json::Value = response.json().await?;
+        Ok(Order {
+            id: data["result"]["order_id"].to_string(),
+            symbol: symbol.to_string(),
+            side,
+            price,
+            amount,
+        })
+    }
+
+    async fn cancel_order(&self, order_id: &str) -> Result<(), Box<dyn Error>> {
+        let url = "https://api.bybit.com/v2/private/order/cancel";
+        let params = serde_json::json!({
+            "api_key": self.api_key,
+            "order_id": order_id,
+        });
+        self.client.post(url).json(&params).send().await?;
+        Ok(())
+    }
+
+    async fn get_order_book(&self, symbol: &str) -> Result<OrderBook, Box<dyn Error>> {
+        let url = format!("https://api.bybit.com/v2/public/orderBook/L2?symbol={}", symbol);
+        let response = self.client.get(&url).send().await?;
+        let data: serde_json::Value = response.json().await?;
+        let bids: Vec<(f64, f64)> = data["result"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry["side"] == "Buy")
+            .map(|entry| {
+                let price = entry["price"].as_str().unwrap().parse::<f64>().unwrap();
+                let amount = entry["size"].as_f64().unwrap();
+                (price, amount)
+            })
+            .collect();
+        let asks: Vec<(f64, f64)> = data["result"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|entry| entry["side"] == "Sell")
+            .map(|entry| {
+                let price = entry["price"].as_str().unwrap().parse::<f64>().unwrap();
+                let amount = entry["size"].as_f64().unwrap();
+                (price, amount)
+            })
+            .collect();
+        Ok(OrderBook { bids, asks })
+    }
+
+    async fn get_trading_pairs(&self) -> Result<Vec<String>, Box<dyn Error>> {
+        let url = "https://api.bybit.com/v2/public/symbols";
+        let response = self.client.get(url).send().await?;
+        let data: serde_json::Value = response.json().await?;
+        let pairs: Vec<String> = data["result"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|symbol| symbol["name"].as_str().unwrap().to_string())
+            .collect();
+        Ok(pairs)
+    }
+
+    async fn start_price_stream(&self, symbol: &str) {
+        let ws_url = "wss://stream.bybit.com/realtime";
+        let (mut ws_stream, _) = connect_async(ws_url).await.unwrap();
+        let subscribe_msg = serde_json::json!({
+            "op": "subscribe",
+            "args": [format!("trade.{}", symbol)],
+        });
+        ws_stream
+            .send(Message::Text(subscribe_msg.to_string()))
+            .await
+            .unwrap();
+        let price = Arc::clone(&self.price);
+        while let Some(msg) = ws_stream.next().await {
+            if let Ok(Message::Text(text)) = msg {
+                if let Ok(data) = serde_json::from_str::<serde_json::Value>(&text) {
+                    if let Some(trades) = data["data"].as_array() {
+                        if let Some(trade) = trades.get(0) {
+                            let mut price_lock = price.lock().await;
+                            *price_lock = trade["price"].as_f64().unwrap_or(*price_lock);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Торговое ядро
+
+struct Trader {
+    exchanges: Vec<Box<dyn Exchange>>,
+    pairs: Vec<String>,
+    spread: f64,
+    amount: f64,
+}
+
+impl Trader {
+    fn new(exchanges: Vec<Box<dyn Exchange>>, pairs: Vec<String>, spread: f64, amount: f64) -> Self {
+        Self {
+            exchanges,
+            pairs,
+            spread,
+            amount,
+        }
+    }
+
+    async fn start(&self) -> Result<(), Box<dyn Error>> {
+        for exchange in &self.exchanges {
+            info!("Starting trader for exchange: {}", exchange.name());
+            exchange.connect().await?;
+
+            for pair in &self.pairs {
+                let pair = pair.clone();
+                let exchange_clone = exchange.as_ref();
+                tokio::spawn(async move {
+                    exchange_clone.start_price_stream(&pair).await;
+                });
+            }
+
+            for pair in &self.pairs {
+                let pair = pair.clone();
+                let exchange = exchange.as_ref();
+                let spread = self.spread;
+                let amount = self.amount;
+
+                tokio::spawn(async move {
+                    loop {
+                        match Self::trade_cycle(exchange, &pair, spread, amount).await {
+                            Ok(_) => info!("Trade cycle completed for {} on {}", pair, exchange.name()),
+                            Err(e) => error!("Error in trade cycle for {} on {}: {}", pair, exchange.name(), e),
+                        }
+                        sleep(Duration::from_secs(60)).await;
+                    }
+                });
+            }
+        }
+        Ok(())
+    }
+
+    async fn trade_cycle(
+        exchange: &dyn Exchange,
+        pair: &str,
+        spread: f64,
+        amount: f64,
+    ) -> Result<(), Box<dyn Error>> {
+        let price = exchange.get_price(pair).await?;
+        if price == 0.0 {
+            return Ok(());
+        }
+        let buy_price = price * (1.0 - spread);
+        let sell_price = price * (1.0 + spread);
+        let trade_amount = amount / price;
+
+        let buy_order = exchange
+            .place_limit_order(pair, Side::Buy, buy_price, trade_amount)
+            .await?;
+        let sell_order = exchange
+            .place_limit_order(pair, Side::Sell, sell_price, trade_amount)
+            .await?;
+
+        info!(
+            "Placed orders for {} on {}: Buy at {}, Sell at {}",
+            pair, exchange.name(), buy_price, sell_price
+        );
+
+        Ok(())
+    }
+}
+
+// Точка входа
+
+#[tokio::main]
+async fn main() {
+    env_logger::init();
+    dotenv::dotenv().ok();
+
+    let binance_api_key = env::var("BINANCE_API_KEY").unwrap_or_default();
+    let binance_api_secret = env::var("BINANCE_API_SECRET").unwrap_or_default();
+    let bybit_api_key = env::var("BYBIT_API_KEY").unwrap_or_default();
+    let bybit_api_secret = env::var("BYBIT_API_SECRET").unwrap_or_default();
+
+    let exchanges: Vec<Box<dyn Exchange>> = vec![
+        Box::new(Binance::new(binance_api_key, binance_api_secret)),
+        Box::new(Bybit::new(bybit_api_key, bybit_api_secret)),
+    ];
+
+    let pairs = vec!["BTCUSDT".to_string(), "ETHUSDT".to_string()];
+    let trader = Trader::new(exchanges, pairs, 0.002, 20.0);
+
+    trader.start().await.unwrap();
+
+    tokio::signal::ctrl_c().await.unwrap();
+}

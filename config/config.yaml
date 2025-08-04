@@ -1,0 +1,307 @@
+# CryptoAlphaPro Configuration - HIGH LEVERAGE EDITION
+app:
+  name: "CryptoAlphaPro"
+  version: "2.0.0"
+  debug: false
+  log_level: "INFO"
+  max_workers: 8
+
+# Database Configuration
+databases:
+  timescale:
+    host: "${TIMESCALE_HOST:localhost}"
+    port: 5432
+    database: "crypto_alpha_pro"
+    username: "postgres"
+    password: "${TIMESCALE_PASSWORD}"
+    max_connections: 20
+    
+  postgresql:
+    host: "${POSTGRES_HOST:localhost}"
+    port: 5432
+    database: "crypto_alpha_pro_meta"
+    username: "postgres"
+    password: "${POSTGRES_PASSWORD}"
+    max_connections: 10
+    
+  redis:
+    host: "${REDIS_HOST:localhost}"
+    port: 6379
+    database: 0
+    password: "${REDIS_PASSWORD}"
+    max_connections: 20
+
+# Exchange Configuration - REAL KEYS
+exchanges:
+  binance:
+    api_key: "${BINANCE_API_KEY}"
+    secret: "${BINANCE_SECRET}"
+    sandbox: false
+    rate_limit: 1200
+    max_leverage: 50  # UP TO 50X LEVERAGE
+    default_leverage: 5
+    
+  bybit:
+    api_key: "${BYBIT_API_KEY}"
+    secret: "${BYBIT_SECRET}"
+    sandbox: false
+    rate_limit: 1000
+    max_leverage: 50  # UP TO 50X LEVERAGE
+    default_leverage: 5
+    
+  okx:
+    api_key: "${OKX_API_KEY}"
+    secret: "${OKX_SECRET}"
+    passphrase: "${OKX_PASSPHRASE}"
+    sandbox: false
+    rate_limit: 1000
+    max_leverage: 50  # UP TO 50X LEVERAGE
+    default_leverage: 5
+
+# Trading Configuration - HIGH LEVERAGE SETTINGS
+trading:
+  pairs:
+    - "BTC/USDT"
+    - "ETH/USDT"
+    - "BNB/USDT"
+    - "ADA/USDT"
+    - "SOL/USDT"
+    - "XRP/USDT"
+    - "DOT/USDT"
+    - "AVAX/USDT"
+    - "MATIC/USDT"
+    - "ATOM/USDT"
+    
+  timeframes:
+    - "1m"
+    - "5m"
+    - "15m"
+    - "1h"
+    - "4h"
+    - "1d"
+    
+  leverage:
+    min: 1
+    max: 50  # MAXIMUM 50X LEVERAGE
+    default: 5
+    dynamic: true
+    volatility_adjustment: true
+
+# Indicators Configuration
+indicators:
+  rsi:
+    period: 14
+    oversold: 30
+    overbought: 70
+    
+  macd:
+    fast_period: 12
+    slow_period: 26
+    signal_period: 9
+    
+  ema:
+    periods: [9, 21, 50, 200]
+    
+  bollinger_bands:
+    period: 20
+    std_dev: 2
+    
+  atr:
+    period: 14
+    
+  volume:
+    period: 20
+    spike_threshold: 2.0
+
+# Risk Management - HIGH LEVERAGE EDITION
+risk_management:
+  max_portfolio_risk: 0.15  # 15% of portfolio
+  max_position_size: 0.25   # 25% per position
+  max_leverage: 50          # UP TO 50X LEVERAGE
+  min_leverage: 1
+  default_leverage: 5
+  
+  leverage_calculation:
+    base_leverage: 5
+    confidence_multiplier: 2.0
+    volatility_reduction: true
+    max_volatility_leverage: 25  # Reduce leverage on high volatility
+    
+  stop_loss:
+    atr_multiplier: 2.0
+    max_loss_percent: 0.05  # 5% max loss per trade
+    
+  take_profit:
+    atr_multipliers: [2.0, 4.0, 6.0]
+    partial_close: [0.33, 0.33, 0.34]
+    
+  position_sizing:
+    kelly_criterion: true
+    max_kelly: 0.25
+    confidence_threshold: 0.75
+
+# Signal Generation
+signals:
+  confidence_threshold: 0.75
+  cooldown_seconds: 30
+  max_signals_per_hour: 10
+  
+  filters:
+    min_volume_change: 1.2
+    min_price_change: 0.002
+    trend_confirmation: true
+    
+  targets:
+    generation_time_ms: 250
+    accuracy_target: 0.72
+
+# Telegram Bot Configuration
+telegram:
+  bot_token: "${TELEGRAM_BOT_TOKEN}"
+  chat_id: "${TELEGRAM_CHAT_ID}"
+  admin_chat_id: "${TELEGRAM_ADMIN_CHAT_ID}"
+  
+  features:
+    send_signals: true
+    send_alerts: true
+    interactive_commands: true
+    risk_notifications: true
+    
+  commands:
+    - "/start"
+    - "/status"
+    - "/signals"
+    - "/stats"
+    - "/config"
+    - "/risk"
+    - "/leverage"  # NEW: Leverage management
+
+# External APIs
+external_apis:
+  dune:
+    api_key: "${DUNE_API_KEY}"
+    query_id: "${DUNE_QUERY_ID}"
+    base_url: "https://api.dune.com/api/v1"
+    
+  cryptopanic:
+    api_key: "${CRYPTOPANIC_API_KEY}"
+    base_url: "https://cryptopanic.com/api/developer/v2"
+    filter: "hot"
+    
+  twitter:
+    bearer_token: "${TWITTER_BEARER_TOKEN}"
+    accounts_to_monitor:
+      - "elonmusk"
+      - "cz_binance"
+      - "VitalikButerin"
+      - "saylor"
+
+# Machine Learning Configuration
+ml:
+  models:
+    lstm:
+      sequence_length: 60
+      hidden_size: 128
+      num_layers: 2
+      dropout: 0.2
+      
+    garch:
+      p: 1
+      q: 1
+      
+    ensemble:
+      weights:
+        lstm: 0.4
+        garch: 0.3
+        xgboost: 0.3
+        
+  training:
+    retrain_interval_hours: 24
+    min_data_points: 1000
+    validation_split: 0.2
+
+# Monitoring Configuration
+monitoring:
+  prometheus:
+    port: 9090
+    metrics_interval: 30
+    
+  grafana:
+    port: 3000
+    
+  alerts:
+    volatility_threshold: 0.05
+    price_deviation_threshold: 0.03
+    volume_spike_threshold: 3.0
+    funding_rate_threshold: 0.01
+
+# Arbitrage Configuration
+arbitrage:
+  enabled: true
+  min_profit_percent: 0.2
+  max_exposure: 10000  # USDT
+  
+  triangular:
+    enabled: true
+    min_profit_percent: 0.1
+    
+  cross_exchange:
+    enabled: true
+    exchanges: ["binance", "bybit", "okx"]
+
+# Security Configuration
+security:
+  encryption:
+    algorithm: "AES-256"
+    key_rotation_days: 90
+    
+  rate_limiting:
+    requests_per_minute: 1000
+    burst_size: 100
+    
+  api_security:
+    require_https: true
+    validate_signatures: true
+    whitelist_ips: []
+
+# Performance Configuration
+performance:
+  max_processing_time_ms: 10
+  data_retention_days: 30
+  cache_ttl_seconds: 300
+  
+  thresholds:
+    signal_generation_ms: 250
+    data_latency_ms: 100
+    throughput_tps: 5000
+
+# Backtesting Configuration
+backtesting:
+  start_date: "2020-01-01"
+  end_date: "2024-01-01"
+  initial_balance: 10000
+  commission: 0.001
+  
+  metrics:
+    target_sharpe: 2.0
+    target_sortino: 2.5
+    max_drawdown: 0.25
+    target_win_rate: 0.6
+
+# High Leverage Risk Controls - NEW SECTION
+high_leverage_controls:
+  max_leverage: 50
+  volatility_limits:
+    low_vol: 50    # Max 50x on low volatility (<2%)
+    medium_vol: 25 # Max 25x on medium volatility (2-5%)
+    high_vol: 10   # Max 10x on high volatility (>5%)
+    
+  confidence_requirements:
+    "50x": 0.95  # 95% confidence required for 50x
+    "25x": 0.85  # 85% confidence required for 25x
+    "10x": 0.75  # 75% confidence required for 10x
+    
+  emergency_stops:
+    max_drawdown_percent: 20  # Close all positions at 20% drawdown
+    correlation_limit: 0.8     # Reduce leverage if correlation >80%
+    volatility_spike: 3.0      # Reduce leverage on 3x volatility spike 
