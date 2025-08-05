@@ -1250,16 +1250,24 @@ def explain_signal(signal: Dict, analysis: Dict, mtf_analysis: Dict = None, onch
         else:
             explanations.append("• Смешанное подтверждение тренда")
     
+        # ИСПРАВЛЕНО: Проверяем реальную несовместимость таймфреймов
+        if abs(positive_count - negative_count) <= 1 and tf_count >= 3:
+            warnings.append("❗️Таймфреймы несовместимы (смешанные сигналы)")
+    
     # Пробой уровней
     explanations.append("• Пробитый на 15-минутном графике уровень поддержки был повторно протестирован на 5-минутном графике и выступил в качестве поддержки")
     
-    # Предупреждения
-    warnings.append("❗️Таймфреймы несовместимы (5–15 минут)")
+    # ИСПРАВЛЕНО: Volume Spike предупреждение только если реально нет спайка
+    volume_ratio = analysis.get('volume_ratio', 1.0)
+    if volume_ratio < 1.2:
+        warnings.append("❗️Нет Volume Spike (низкий объем торгов)")
     
-    # Stochastic RSI предупреждение
+    # ИСПРАВЛЕНО: Stochastic RSI предупреждение только при реально слабом сигнале
     stoch_k = analysis.get('stoch_k', 50)
-    if stoch_k < 50:
-        warnings.append("❗️Слабое подтверждение направления Stoch RSI")
+    if stoch_k < 40 and signal.get('action', '').startswith('BUY'):
+        warnings.append("❗️Слабое подтверждение направления Stoch RSI (медвежий импульс)")
+    elif stoch_k > 60 and signal.get('action', '').startswith('SELL'):
+        warnings.append("❗️Слабое подтверждение направления Stoch RSI (бычий импульс)")
     
     # Формируем итоговое сообщение
     result = ""
