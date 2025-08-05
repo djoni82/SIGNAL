@@ -1638,7 +1638,7 @@ class AlphaSignalBot:
         self.ai_engine = RealTimeAIEngine()
         self.onchain_analyzer = OnChainAnalyzer()
         self.telegram_bot = TelegramBot()
-        self.scalping_engine = ScalpingSignalEngine(min_confidence=0.55, min_filters=3)  # Реалистичные требования
+        self.scalping_engine = ScalpingSignalEngine(min_confidence=0.25, min_filters=2)  # ИСПРАВЛЕНО: Реалистичные требования
         self.running = False
         self.start_time = time.time()  # Добавляем для отслеживания времени работы
         
@@ -1676,6 +1676,7 @@ class AlphaSignalBot:
         print(f"🎯 Минимальная уверенность: {self.min_confidence*100:.0f}%")
         print(f"🎯 Топ сигналов: {self.top_n}")
         print(f"⏰ Частота обновления: {self.update_frequency} сек")
+        print(f"⚡ Скальпинг: {len(self.scalping_pairs)} пар, {self.scalping_engine.min_confidence*100:.0f}% уверенность")
         print("=" * 60)
         
         # Отправляем сообщение о запуске
@@ -1686,6 +1687,10 @@ class AlphaSignalBot:
             f"🎯 Минимальная уверенность: {self.min_confidence*100:.0f}%\n"
             f"🎯 Топ сигналов: {self.top_n}\n"
             f"⏰ Частота обновления: {self.update_frequency} сек\n\n"
+            f"⚡ **СКАЛЬПИНГ АКТИВЕН:**\n"
+            f"📊 Пар для скальпинга: {len(self.scalping_pairs)}\n"
+            f"🎯 Минимальная уверенность скальпинга: {self.scalping_engine.min_confidence*100:.0f}%\n"
+            f"⏰ Частота скальпинга: {self.scalping_frequency} сек\n\n"
             "🎯 Система 'Best Alpha Only' - только лучшие сигналы!\n\n"
             "💬 Управление: /help для команд"
         )
