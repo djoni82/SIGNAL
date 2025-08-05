@@ -951,8 +951,12 @@ class TelegramBot:
                         f"🔄 Циклов анализа: {self.bot_instance.stats['cycles']}\n"
                         f"📊 Всего сигналов: {self.bot_instance.stats['total_signals']}\n"
                         f"📤 Отправлено в Telegram: {self.bot_instance.stats['sent_signals']}\n"
+                        f"⚡ **СКАЛЬПИНГ:**\n"
+                        f"📊 Скальпинг сигналов: {self.bot_instance.stats['scalping_signals']}\n"
+                        f"📤 Скальпинг отправлено: {self.bot_instance.stats['scalping_sent']}\n"
                         f"❌ Ошибок: {self.bot_instance.stats['errors']}\n"
                         f"🎯 Минимальная уверенность: {self.bot_instance.min_confidence*100:.0f}%\n"
+                        f"⚡ Минимальная уверенность скальпинга: {self.bot_instance.scalping_engine.min_confidence*100:.0f}%\n"
                         f"📊 Пар для анализа: {len(self.bot_instance.pairs)}",
                         chat_id
                     )
@@ -1638,7 +1642,7 @@ class AlphaSignalBot:
         self.ai_engine = RealTimeAIEngine()
         self.onchain_analyzer = OnChainAnalyzer()
         self.telegram_bot = TelegramBot()
-        self.scalping_engine = ScalpingSignalEngine(min_confidence=0.25, min_filters=2)  # ИСПРАВЛЕНО: Реалистичные требования
+        self.scalping_engine = ScalpingSignalEngine(min_confidence=0.35, min_filters=4)  # ЗОЛОТАЯ СЕРЕДИНА: Баланс качества и частоты
         self.running = False
         self.start_time = time.time()  # Добавляем для отслеживания времени работы
         
@@ -1704,6 +1708,12 @@ class AlphaSignalBot:
         # Добавляем скальпинг если включен
         if self.scalping_enabled:
             tasks.append(self.scalping_signals_loop())
+            print(f"✅ Скальпинг задача добавлена в список задач")
+        else:
+            print(f"❌ Скальпинг отключен")
+        
+        print(f"📊 Всего задач для запуска: {len(tasks)}")
+        print("🚀 Запуск всех задач...")
         
         await asyncio.gather(*tasks)
     
@@ -1773,10 +1783,13 @@ class AlphaSignalBot:
                 print(f"\n⚡ Scalping cycle: Analyzing {len(self.scalping_pairs)} pairs...")
                 
                 scalping_signals = []
+                analyzed_count = 0
+                error_count = 0
                 
                 # Анализируем пары для скальпинга
                 for symbol in self.scalping_pairs:
                     try:
+                        analyzed_count += 1
                         # Получаем данные для коротких таймфреймов
                         ohlcv_data = await self.data_manager.get_multi_timeframe_data(
                             symbol, ['1m', '5m', '15m']
@@ -1798,22 +1811,28 @@ class AlphaSignalBot:
                                     print(f"⚡ SCALP {scalp_signal['action']} {symbol} conf={scalp_signal['confidence']:.3f} price={current_price}")
                     
                     except Exception as e:
+                        error_count += 1
                         print(f"❌ Scalping error for {symbol}: {e}")
                         continue
                 
+                print(f"📊 Scalping analysis: {analyzed_count} pairs, {len(scalping_signals)} signals, {error_count} errors")
+                
                 # Отправляем скальпинг сигналы
+                sent_count = 0
                 for signal in scalping_signals:
                     try:
                         message = self.format_scalping_signal_for_telegram(signal)
                         if await self.telegram_bot.send_message(message):
                             print(f"⚡ Scalping signal for {signal['symbol']} sent to Telegram")
                             self.stats['scalping_sent'] += 1
+                            sent_count += 1
                         else:
                             print(f"❌ Failed to send scalping signal for {signal['symbol']}")
                     except Exception as e:
                         print(f"❌ Error sending scalping signal: {e}")
                 
                 self.stats['scalping_signals'] += len(scalping_signals)
+                print(f"📤 Sent {sent_count}/{len(scalping_signals)} scalping signals to Telegram")
                 
                 # Ждем до следующего скальпинг цикла
                 await asyncio.sleep(self.scalping_frequency)
@@ -1841,7 +1860,13 @@ class AlphaSignalBot:
             # Определяем эмодзи и тип
             if 'STRONG' in action:
                 emoji = "🔥⚡"
-                strength = "СИЛЬНЫЙ"
+                strength = "ПРЕМИУМ"
+            elif confidence >= 0.7:
+                emoji = "💎⚡"
+                strength = "ВЫСОКОКАЧЕСТВЕННЫЙ"
+            elif confidence >= 0.5:
+                emoji = "⚡"
+                strength = "КАЧЕСТВЕННЫЙ"
             else:
                 emoji = "⚡"
                 strength = "БЫСТРЫЙ"
@@ -1858,18 +1883,44 @@ class AlphaSignalBot:
             message += f"🎯 TP2: ${tp2:.6f}\n"
             message += f"🛑 SL: ${stop_loss:.6f}\n\n"
             
-            # Детали
+            # Детали качества
             message += f"📊 Уверенность: {confidence*100:.1f}%\n"
             message += f"⏱️ Время удержания: {hold_time}\n"
             message += f"🎯 Фильтров прошло: {filters_passed}/{total_filters}\n"
+            
+            # Показываем оценку качества если есть
+            quality_score = 0
+            for detail in filter_details:
+                if "Согласованность ТФ" in detail or "тренд" in detail or "импульс" in detail:
+                    quality_score += 1
+            
+            if quality_score >= 3:
+                message += f"💎 Качество сигнала: ПРЕМИУМ\n"
+            elif quality_score >= 2:
+                message += f"⭐ Качество сигнала: ВЫСОКОЕ\n"
+            else:
+                message += f"✅ Качество сигнала: ХОРОШЕЕ\n"
+                
             message += f"🕒 Время: {datetime.now().strftime('%H:%M:%S')}\n\n"
             
-            # Детали фильтров (первые 5)
+            # Детали фильтров (показываем самые важные)
             filter_details = signal.get('filter_details', [])
             if filter_details:
-                message += "🔍 **Ключевые сигналы:**\n"
-                for detail in filter_details[:5]:
+                message += "🔍 **Ключевые факторы:**\n"
+                # Показываем только качественные индикаторы
+                important_details = []
+                for detail in filter_details:
+                    if any(keyword in detail for keyword in ['Согласованность', 'тренд', 'импульс', 'волатильность', 'EMA']):
+                        important_details.append(detail)
+                
+                # Показываем до 4 самых важных
+                for detail in important_details[:4]:
                     message += f"• {detail}\n"
+                
+                # Если есть технические детали, показываем 2-3 лучших
+                tech_details = [d for d in filter_details if d not in important_details]
+                if tech_details:
+                    message += f"• {tech_details[0]}\n"  # Показываем лучший технический индикатор
             
             message += f"\n⚠️ **СКАЛЬПИНГ** - быстрый вход/выход!"
             

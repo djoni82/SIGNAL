@@ -262,6 +262,108 @@ class ScalpingSignalEngine:
             if confidence < self.min_confidence:
                 return None
             
+            # ДОПОЛНИТЕЛЬНЫЕ ФИЛЬТРЫ КАЧЕСТВА для золотой середины
+            quality_score = 0
+            quality_details = []
+            
+            # 1. Проверка согласованности таймфреймов (вес: 25%)
+            tf_consensus = 0
+            tf_directions = []
+            for tf, tf_data in tf_analysis.items():
+                tf_rsi = tf_data.get('rsi_fast', 50)
+                if (action.endswith('BUY') and tf_rsi < 45) or (action.endswith('SELL') and tf_rsi > 55):
+                    tf_consensus += 1
+                tf_directions.append('BUY' if tf_rsi < 45 else 'SELL' if tf_rsi > 55 else 'NEUTRAL')
+            
+            if tf_consensus >= len(tf_analysis) * 0.6:  # 60% согласованность (было 70%)
+                quality_score += 25
+                quality_details.append(f"Согласованность ТФ: {tf_consensus}/{len(tf_analysis)}")
+            elif tf_consensus >= len(tf_analysis) * 0.4:  # Частичная согласованность
+                quality_score += 15
+                quality_details.append(f"Частичная согласованность ТФ: {tf_consensus}/{len(tf_analysis)}")
+            
+            # 2. Проверка силы тренда через ADX (вес: 20%)
+            avg_adx = 0
+            adx_count = 0
+            for tf_data in tf_analysis.values():
+                if 'adx_fast' in tf_data:
+                    avg_adx += tf_data['adx_fast']
+                    adx_count += 1
+            
+            if adx_count > 0:
+                avg_adx /= adx_count
+                if avg_adx > 30:
+                    quality_score += 20
+                    quality_details.append(f"Сильный тренд (ADX: {avg_adx:.1f})")
+                elif avg_adx > 20:
+                    quality_score += 10
+                    quality_details.append(f"Умеренный тренд (ADX: {avg_adx:.1f})")
+            
+            # 3. Проверка объемного импульса (вес: 20%)
+            volume_quality = 0
+            for tf_data in tf_analysis.values():
+                vol_momentum = tf_data.get('volume_momentum', 0)
+                if abs(vol_momentum) > 15:  # Сильный объемный импульс
+                    volume_quality += 1
+            
+            if volume_quality >= len(tf_analysis) * 0.5:
+                quality_score += 20
+                quality_details.append("Сильный объемный импульс")
+            elif volume_quality > 0:
+                quality_score += 10
+                quality_details.append("Умеренный объемный импульс")
+            
+            # 4. Проверка ценового импульса (вес: 15%)
+            price_momentum_strength = 0
+            for tf_data in tf_analysis.values():
+                price_momentum = abs(tf_data.get('price_momentum', 0))
+                if price_momentum > 2.0:  # Сильное движение цены
+                    price_momentum_strength += 1
+            
+            if price_momentum_strength >= len(tf_analysis) * 0.5:
+                quality_score += 15
+                quality_details.append("Сильный ценовой импульс")
+            elif price_momentum_strength > 0:
+                quality_score += 8
+                quality_details.append("Умеренный ценовой импульс")
+            
+            # 5. Проверка волатильности (вес: 10%)
+            volatility_check = 0
+            for tf_data in tf_analysis.values():
+                if 'atr_fast' in tf_data:
+                    atr_ratio = tf_data['atr_fast'] / current_price
+                    if 0.005 < atr_ratio < 0.03:  # Оптимальная волатильность для скальпинга
+                        volatility_check += 1
+            
+            if volatility_check >= len(tf_analysis) * 0.7:
+                quality_score += 10
+                quality_details.append("Оптимальная волатильность")
+            
+            # 6. Проверка пересечений EMA (вес: 10%)
+            ema_crossovers = 0
+            for tf_data in tf_analysis.values():
+                ema_cross = tf_data.get('ema_cross', 0)
+                if (action.endswith('BUY') and ema_cross > 0) or (action.endswith('SELL') and ema_cross < 0):
+                    ema_crossovers += 1
+            
+            if ema_crossovers >= len(tf_analysis) * 0.5:
+                quality_score += 10
+                quality_details.append("Подтверждение EMA")
+            
+            # ФИНАЛЬНАЯ ПРОВЕРКА КАЧЕСТВА
+            # Требуем минимум 30 баллов из 100 для качественного сигнала (реалистичная золотая середина)
+            if quality_score < 30:
+                return None  # Сигнал недостаточно качественный
+            
+            # Корректируем уверенность на основе качества
+            quality_multiplier = quality_score / 100.0
+            # Бонус за качество: от 0% до 20% к базовой уверенности
+            quality_bonus = quality_multiplier * 0.2
+            confidence = min(0.95, confidence + quality_bonus)
+            
+            # Обновляем детали фильтра
+            filter_details.extend(quality_details)
+            
             # Рассчитываем плечо для скальпинга
             if confidence >= 0.98:
                 leverage = 30.0  # Максимальное плечо для скальпинга
