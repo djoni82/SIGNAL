@@ -826,6 +826,11 @@ class OnChainAnalyzer:
         self.cache = {}
         self.cache_timeout = 300  # 5 минут
     
+    def _session(self) -> aiohttp.ClientSession:
+        """HTTP-сессия с отключенной SSL валидацией (фикс временных SSL проблем)."""
+        connector = aiohttp.TCPConnector(ssl=False)
+        return aiohttp.ClientSession(connector=connector)
+    
     async def get_onchain_metrics(self, symbol: str) -> Dict:
         """Получение on-chain метрик"""
         try:
@@ -881,7 +886,7 @@ class OnChainAnalyzer:
                 'offset': 0
             }
             
-            async with aiohttp.ClientSession() as session:
+            async with self._session() as session:
                 async with session.get(url, headers=headers, params=params, timeout=15) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -952,7 +957,7 @@ class OnChainAnalyzer:
             # Получаем данные о монете через CoinGecko
             url = f"https://api.coingecko.com/api/v3/coins/{clean_symbol}"
             
-            async with aiohttp.ClientSession() as session:
+            async with self._session() as session:
                 async with session.get(url, timeout=10) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -1023,7 +1028,7 @@ class OnChainAnalyzer:
                 'interval': 'daily'
             }
             
-            async with aiohttp.ClientSession() as session:
+            async with self._session() as session:
                 async with session.get(url, params=params, timeout=10) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -1109,7 +1114,7 @@ class OnChainAnalyzer:
                 'filter': 'rising'
             }
             
-            async with aiohttp.ClientSession() as session:
+            async with self._session() as session:
                 async with session.get(url, params=params, timeout=10) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -1176,6 +1181,11 @@ class TelegramBot:
         """Устанавливаем ссылку на основной бот для управления"""
         self.bot_instance = bot_instance
     
+    def _session(self) -> aiohttp.ClientSession:
+        """Создаёт HTTP-сессию для Telegram с отключённой SSL-проверкой (фикс SSL ошибок)."""
+        connector = aiohttp.TCPConnector(ssl=False)
+        return aiohttp.ClientSession(connector=connector)
+    
     async def send_message(self, message: str, chat_id: str = None) -> bool:
         """Отправка сообщения в Telegram"""
         try:
@@ -1188,40 +1198,55 @@ class TelegramBot:
                 'disable_web_page_preview': True
             }
             
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=data, timeout=10) as response:
+            async with self._session() as session:
+                async with session.post(url, json=data, timeout=15) as response:
                     if response.status == 200:
                         result = await response.json()
                         return result.get('ok', False)
-            
+        
         except Exception as e:
             print(f"❌ Telegram error: {e}")
         
         return False
     
+    async def _ensure_polling_mode(self) -> None:
+        """Сбрасывает webhook, чтобы работал getUpdates (polling-режим)."""
+        try:
+            url = f"https://api.telegram.org/bot{self.bot_token}/deleteWebhook"
+            params = {"drop_pending_updates": "false"}
+            async with self._session() as session:
+                await session.get(url, params=params, timeout=10)
+        except Exception as e:
+            print(f"❌ deleteWebhook error: {e}")
+    
     async def start_webhook_listener(self):
         """Запуск прослушивания команд Telegram"""
         try:
+            # Обеспечиваем polling-режим (на случай, если webhook активен)
+            await self._ensure_polling_mode()
+            
             # Получаем обновления
             url = f"https://api.telegram.org/bot{self.bot_token}/getUpdates"
-            params = {'offset': -1, 'limit': 1}
+            params = {'offset': -1, 'limit': 1, 'timeout': 10}
             
             while True:
                 try:
-                    async with aiohttp.ClientSession() as session:
-                        async with session.get(url, params=params, timeout=10) as response:
+                    async with self._session() as session:
+                        async with session.get(url, params=params, timeout=20) as response:
                             if response.status == 200:
                                 data = await response.json()
                                 if data.get('ok') and data.get('result'):
                                     for update in data['result']:
                                         await self._process_update(update)
                                         params['offset'] = update['update_id'] + 1
-                    
+                
                     await asyncio.sleep(2)  # Проверяем каждые 2 секунды
-                    
+                
                 except Exception as e:
                     print(f"❌ Webhook listener error: {e}")
                     await asyncio.sleep(5)
+                    # Переустановим polling, если была ошибка
+                    await self._ensure_polling_mode()
                     
         except Exception as e:
             print(f"❌ Failed to start webhook listener: {e}")
@@ -1253,16 +1278,21 @@ class TelegramBot:
             command = command.lower().strip()
             
             if command == '/start' or command == '/startbot':
-                await self.send_message(
-                    "🤖 **CRYPTOALPHAPRO BOT CONTROL**\n\n"
-                    "Доступные команды:\n"
-                    "/status - статус бота\n"
-                    "/stop или /stopbot - остановить бота\n"
-                    "/restart - перезапустить бота\n"
-                    "/stats - статистика\n"
-                    "/help - помощь",
-                    chat_id
-                )
+                # Если запрос на запуск — реально запускаем, если не работает
+                if self.bot_instance and not self.bot_instance.running:
+                    asyncio.create_task(self.bot_instance.start())
+                    await self.send_message("🟢 Бот запущен", chat_id)
+                else:
+                    await self.send_message(
+                        "🤖 **CRYPTOALPHAPRO BOT CONTROL**\n\n"
+                        "Доступные команды:\n"
+                        "/status - статус бота\n"
+                        "/stop или /stopbot - остановить бота\n"
+                        "/restart - перезапустить бота\n"
+                        "/stats - статистика\n"
+                        "/help - помощь",
+                        chat_id
+                    )
             
             elif command == '/status':
                 if self.bot_instance:
@@ -1285,7 +1315,7 @@ class TelegramBot:
                 else:
                     await self.send_message("❌ Бот уже остановлен", chat_id)
             
-            elif command == '/restart':
+            elif command == '/restart' or command == '/reload':
                 if self.bot_instance:
                     if self.bot_instance.running:
                         self.bot_instance.stop()
@@ -1326,8 +1356,8 @@ class TelegramBot:
                     "**Команды управления:**\n"
                     "/status - текущий статус бота\n"
                     "/stop или /stopbot - остановить анализ сигналов\n"
-                    "/start или /startbot - показать команды\n"
-                    "/restart - перезапустить бота\n"
+                    "/start или /startbot - запустить бота\n"
+                    "/restart или /reload - перезапустить бота\n"
                     "/stats - подробная статистика\n\n"
                     "**О боте:**\n"
                     "• Анализирует 200+ торговых пар\n"
@@ -1683,6 +1713,9 @@ class UnifiedSignalBot:
         """Запуск бота"""
         self.running = True
         self.start_time = time.time()
+        
+        # Гарантируем, что Telegram работает в polling-режиме
+        await self.telegram_bot._ensure_polling_mode()
         
         print("🚀 CryptoAlphaPro Best Alpha Only Bot v4.0 + SCALPING")
         print("=" * 60)
