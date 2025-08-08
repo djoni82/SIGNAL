@@ -18,9 +18,46 @@ import requests
 import ccxt
 from config import TELEGRAM_CONFIG, EXCHANGE_KEYS, EXTERNAL_APIS, TRADING_CONFIG
 from scalping_engine import ScalpingSignalEngine
+import sys
+import io
 
 # 200+ торговых пар из конфигурации
 TRADING_PAIRS = TRADING_CONFIG['pairs'][:200]  # Берем первые 200 пар
+
+# Дублируем stdout/stderr в файл bot_logs.txt, не ломая вывод в консоль
+class _Tee(io.TextIOBase):
+    def __init__(self, stream: io.TextIOBase, file_path: str):
+        self._stream = stream
+        # Открываем файл в построчном режиме для немедленной записи
+        self._file = open(file_path, 'a', buffering=1, encoding='utf-8')
+    def write(self, data: str) -> int:
+        try:
+            self._stream.write(data)
+        except Exception:
+            pass
+        try:
+            self._file.write(data)
+            self._file.flush()
+        except Exception:
+            pass
+        return len(data)
+    def flush(self) -> None:
+        try:
+            self._stream.flush()
+        except Exception:
+            pass
+        try:
+            self._file.flush()
+        except Exception:
+            pass
+
+_log_file_path = os.environ.get('BOT_LOG_FILE', os.path.join(os.getcwd(), 'bot_logs.txt'))
+try:
+    sys.stdout = _Tee(sys.stdout, _log_file_path)
+    sys.stderr = _Tee(sys.stderr, _log_file_path)
+except Exception:
+    # Если не удалось установить Tee, игнорируем, чтобы не мешать работе бота
+    pass
 
 class UniversalDataManager:
     """Универсальный менеджер данных для всех бирж - РЕАЛЬНЫЕ ДАННЫЕ с ccxt"""
