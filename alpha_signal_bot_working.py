@@ -179,9 +179,6 @@ class UniversalDataManager:
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay)
                     continue
-        else:
-                    # Логируем только критические ошибки
-                    print(f"❌ {exchange_name} error for {symbol} {timeframe}: {e}")
                     return None
         
         return None
@@ -214,7 +211,7 @@ class UniversalDataManager:
             'timestamp': max(d['timestamp'] for d in current_data)
         }
         
-        return {
+            return {
             'historical_data': best_historical.get('historical_data', []),
             'current': aggregated_current,
             'exchanges': len(valid_data),
@@ -564,7 +561,7 @@ class RealTimeAIEngine:
             # Процентное изменение цены
             price_change = (close - open_price) / open_price * 100 if open_price > 0 else 0
         
-        return {
+            return {
             'rsi': rsi,
                 'macd': macd_data,
             'ema_20': ema_20,
@@ -777,7 +774,7 @@ class RealTimeAIEngine:
                     action_prefix = ""
                     confidence_multiplier = confidence * 3  # 0.9 -> 2.7
                     volatility_multiplier = 1.0 / (volatility * 10)
-                leverage = base_leverage * confidence_multiplier * volatility_multiplier
+                    leverage = base_leverage * confidence_multiplier * volatility_multiplier
                     leverage = max(5.0, min(25.0, leverage))
                 else:
                     # Обычная уверенность
@@ -1057,7 +1054,7 @@ def format_signal_for_telegram(signal: Dict, analysis: Dict, mtf_analysis: Dict 
             tp3 = price * 1.10    # +10%
             tp4 = price * 1.135   # +13.5%
             sl = price * 0.95     # -5%
-        else:
+    else:
             position_type = "СИЛЬНУЮ КОРОТКУЮ ПОЗИЦИЮ"
             action_emoji = "🔥📉"
             tp1 = price * 0.975   # -2.5%
@@ -1121,99 +1118,99 @@ def explain_signal(signal: Dict, analysis: Dict, mtf_analysis: Dict = None, onch
     # RSI анализ
     rsi = analysis.get('rsi', 50)
     if rsi > 70:
-        explanations.append(f"• RSI сильный > 70 ({rsi:.2f})")
+            explanations.append(f"• RSI сильный > 70 ({rsi:.2f})")
     elif rsi > 60:
-        explanations.append(f"• RSI сильный > 60 ({rsi:.2f})")
+            explanations.append(f"• RSI сильный > 60 ({rsi:.2f})")
     elif rsi < 30:
-        explanations.append(f"• RSI слабый < 30 ({rsi:.2f}) - перепроданность")
+            explanations.append(f"• RSI слабый < 30 ({rsi:.2f}) - перепроданность")
     elif rsi < 40:
-        explanations.append(f"• RSI слабый < 40 ({rsi:.2f})")
+            explanations.append(f"• RSI слабый < 40 ({rsi:.2f})")
     
     # MACD анализ
     macd_data = analysis.get('macd', {})
     hist = macd_data.get('histogram', 0)
     if abs(hist) > 0.005:
-        explanations.append("• Гистограмма MACD сильная")
+            explanations.append("• Гистограмма MACD сильная")
     elif abs(hist) > 0.003:
-        explanations.append("• Гистограмма MACD умеренная")
+            explanations.append("• Гистограмма MACD умеренная")
     else:
-        explanations.append("• Гистограмма MACD слабая")
+            explanations.append("• Гистограмма MACD слабая")
     
     # EMA анализ
     price = analysis.get('price', 0)
     ema_20 = analysis.get('ema_20', 0)
     ema_50 = analysis.get('ema_50', 0)
     if price > ema_20 > ema_50:
-        explanations.append("• Цена выше EMA, сильное подтверждение")
+            explanations.append("• Цена выше EMA, сильное подтверждение")
     elif price < ema_20 < ema_50:
-        explanations.append("• Цена ниже EMA, медвежий тренд")
+            explanations.append("• Цена ниже EMA, медвежий тренд")
     else:
-        explanations.append("• Смешанные сигналы EMA")
+            explanations.append("• Смешанные сигналы EMA")
     
     # Bollinger Bands анализ
     bb_upper = analysis.get('bb_upper', 0)
     bb_lower = analysis.get('bb_lower', 0)
     if price > bb_upper:
-        explanations.append("• Цена пробила полосу Боллинджера (пробой)")
+            explanations.append("• Цена пробила полосу Боллинджера (пробой)")
     elif price < bb_lower:
-        explanations.append("• Цена ниже нижней полосы Боллинджера")
+            explanations.append("• Цена ниже нижней полосы Боллинджера")
     elif price > bb_upper * 0.98:
-        explanations.append("• Цена близко к верхней полосе Боллинджера")
+            explanations.append("• Цена близко к верхней полосе Боллинджера")
     
     # MA50 анализ
     ma_50 = analysis.get('ma_50', 0)
     if price > ma_50:
-        explanations.append("• Фильтр MA50 пересек положительную линию")
+            explanations.append("• Фильтр MA50 пересек положительную линию")
     else:
-        explanations.append("• Цена ниже MA50")
+            explanations.append("• Цена ниже MA50")
     
     # ADX анализ
     adx = analysis.get('adx', 20)
     if adx >= 50:
-        explanations.append(f"• Сила тренда очень высокая (ADX ≥ 50, {adx:.1f})")
+            explanations.append(f"• Сила тренда очень высокая (ADX ≥ 50, {adx:.1f})")
     elif adx >= 25:
-        explanations.append(f"• Сила тренда высокая (ADX ≥ 25, {adx:.1f})")
+            explanations.append(f"• Сила тренда высокая (ADX ≥ 25, {adx:.1f})")
     elif adx >= 20:
-        explanations.append(f"• Сила тренда умеренная (ADX ≥ 20, {adx:.1f})")
+            explanations.append(f"• Сила тренда умеренная (ADX ≥ 20, {adx:.1f})")
     else:
-        explanations.append(f"• Слабый тренд (ADX < 20, {adx:.1f})")
+            explanations.append(f"• Слабый тренд (ADX < 20, {adx:.1f})")
     
     # Volume анализ
     volume_ratio = analysis.get('volume_ratio', 1.0)
     if volume_ratio > 2.0:
-        explanations.append(f"• Рост объёма более {(volume_ratio-1)*100:.0f}%!")
+            explanations.append(f"• Рост объёма более {(volume_ratio-1)*100:.0f}%!")
     elif volume_ratio > 1.5:
-        explanations.append(f"• Рост объёма более {(volume_ratio-1)*100:.0f}%!")
+            explanations.append(f"• Рост объёма более {(volume_ratio-1)*100:.0f}%!")
     elif volume_ratio > 1.2:
-        explanations.append(f"• Рост объёма {(volume_ratio-1)*100:.0f}%")
+            explanations.append(f"• Рост объёма {(volume_ratio-1)*100:.0f}%")
     else:
         warnings.append("Нет Volume Spike")
     
     # SuperTrend анализ
     supertrend = analysis.get('supertrend', 0)
     if supertrend == 1:
-        explanations.append("• SuperTrend == 1 (бычий тренд)")
+            explanations.append("• SuperTrend == 1 (бычий тренд)")
     else:
         warnings.append("SuperTrend == -1 (медвежий тренд)")
     
     # VWAP анализ
     vwap = analysis.get('vwap', 0)
     if price > vwap:
-        explanations.append("• Price > VWAP")
+            explanations.append("• Price > VWAP")
     else:
         warnings.append("Price < VWAP")
     
     # Donchian Channel анализ
     donchian_middle = analysis.get('donchian_middle', 0)
     if price > donchian_middle:
-        explanations.append("• Price > Donchian Mid")
+            explanations.append("• Price > Donchian Mid")
     else:
         warnings.append("Price < Donchian Mid")
     
     # Orderbook Imbalance анализ
     orderbook_imbalance = analysis.get('orderbook_imbalance', 1.0)
     if orderbook_imbalance > 1.05:
-        explanations.append(f"• Orderbook Imbalance > 1.05 ({orderbook_imbalance:.2f})")
+            explanations.append(f"• Orderbook Imbalance > 1.05 ({orderbook_imbalance:.2f})")
     else:
         warnings.append(f"Orderbook Imbalance < 1.05")
     
@@ -1251,7 +1248,7 @@ def explain_signal(signal: Dict, analysis: Dict, mtf_analysis: Dict = None, onch
             explanations.append("• Подтверждение 4-часового тренда положительное")
         elif negative_count >= tf_count * 0.75:
             warnings.append("MTF Consensus == \"sell\" или \"strong_sell\"")
-        else:
+    else:
             explanations.append("• Смешанное подтверждение тренда")
     
         # ИСПРАВЛЕНО: Проверяем реальную несовместимость таймфреймов
@@ -1709,7 +1706,7 @@ class AlphaSignalBot:
         if self.scalping_enabled:
             tasks.append(self.scalping_signals_loop())
             print(f"✅ Скальпинг задача добавлена в список задач")
-        else:
+    else:
             print(f"❌ Скальпинг отключен")
         
         print(f"📊 Всего задач для запуска: {len(tasks)}")

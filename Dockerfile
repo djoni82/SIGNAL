@@ -22,9 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Создаем пользователя для безопасности
-RUN useradd --create-home --shell /bin/bash app \
-    && chown -R app:app /app
-USER app
+RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
+USER botuser
 
 # Устанавливаем переменные окружения
 ENV PYTHONPATH=/app
@@ -34,4 +33,4 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
 # Команда запуска
-CMD ["python", "alpha_signal_bot_main.py"] 
+CMD ["python", "unified_signal_bot.py"] 

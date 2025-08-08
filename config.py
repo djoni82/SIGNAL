@@ -17,8 +17,8 @@ TELEGRAM_CONFIG = {
 # API ключи для бирж
 EXCHANGE_KEYS = {
     'binance': {
-        'key': 'UGPsFwnP6Sirw5V1aL3xeOwMr7wzWm1eigxDNb2wrJRs3fWP3QDnOjIwVCeipczV',
-        'secret': 'jmA0MyvImfAvMu3KdJ32AkdajzIK2YE1U236KcpiTQRL9ItkM6aqil1jh73XEfPe'
+        'key': 'VizcewpbtrHu0ffMuNtHwoBZVey2bMmoWfIilzeg5500lo4QVQXg6HUkxQsMPZpE',
+        'secret': 'OPABnl1iwGkAaP4mbD8o9Z2Re6ENsm7YciiRThQvx4Y5R1Hrp9AawPmI0daS1OD1'
     },
     'bybit': {
         'key': 'mWoHS9ONHT2EzePncI',

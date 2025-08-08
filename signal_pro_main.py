@@ -179,47 +179,12 @@ class UniversalDataManager:
                 if attempt < max_retries - 1:
                     await asyncio.sleep(retry_delay)
                     continue
-        else:
+                else:
                     # Логируем только критические ошибки
                     print(f"❌ {exchange_name} error for {symbol} {timeframe}: {e}")
                     return None
         
         return None
-    
-    def _aggregate_exchange_data(self, binance_data: Dict, bybit_data: Dict, okx_data: Dict) -> Dict:
-        """Агрегация данных с трех бирж с учетом исторических данных"""
-        valid_data = [data for data in [binance_data, bybit_data, okx_data] if data and data.get('current')]
-        
-        if not valid_data:
-            return None
-        
-        # Если есть только один источник данных, возвращаем его
-        if len(valid_data) == 1:
-            return valid_data[0]
-        
-        # Берем самые длинные исторические данные
-        best_historical = max(valid_data, key=lambda x: len(x.get('historical_data', [])))
-        
-        # Агрегируем текущие данные по всем биржам
-        current_data = []
-        for data in valid_data:
-            current_data.append(data['current'])
-        
-        aggregated_current = {
-            'open': sum(d['open'] for d in current_data) / len(current_data),
-            'high': sum(d['high'] for d in current_data) / len(current_data),
-            'low': sum(d['low'] for d in current_data) / len(current_data),
-            'close': sum(d['close'] for d in current_data) / len(current_data),
-            'volume': sum(d['volume'] for d in current_data) / len(current_data),
-            'timestamp': max(d['timestamp'] for d in current_data)
-        }
-        
-        return {
-            'historical_data': best_historical.get('historical_data', []),
-            'current': aggregated_current,
-            'exchanges': len(valid_data),
-            'sources': [d['exchange'] for d in valid_data]
-        }
 
 class RealTimeAIEngine:
     """Реальный AI движок для анализа сигналов"""
@@ -564,16 +529,16 @@ class RealTimeAIEngine:
             # Процентное изменение цены
             price_change = (close - open_price) / open_price * 100 if open_price > 0 else 0
         
-        return {
-            'rsi': rsi,
+            return {
+                'rsi': rsi,
                 'macd': macd_data,
-            'ema_20': ema_20,
-            'ema_50': ema_50,
-            'bb_upper': bb_upper,
-            'bb_lower': bb_lower,
-            'ma_50': ma_50,
-            'adx': adx,
-            'volume_ratio': volume_ratio,
+                'ema_20': ema_20,
+                'ema_50': ema_50,
+                'bb_upper': bb_upper,
+                'bb_lower': bb_lower,
+                'ma_50': ma_50,
+                'adx': adx,
+                'volume_ratio': volume_ratio,
                 'supertrend': supertrend,
                 'donchian_upper': donchian_upper,
                 'donchian_lower': donchian_lower,
@@ -675,7 +640,7 @@ class RealTimeAIEngine:
             elif price < bb_lower * 1.02:
                 confidence += 0.05  # Близко к нижней полосе
             
-            # Multi-timeframe согласованность (0-0.1) - ИСПРАВЛЕНО
+            # Multi-timeframe согласованность (0-0.1)
             tf_agreement = 0
             tf_count = 0
             tf_signals = []
@@ -777,7 +742,7 @@ class RealTimeAIEngine:
                     action_prefix = ""
                     confidence_multiplier = confidence * 3  # 0.9 -> 2.7
                     volatility_multiplier = 1.0 / (volatility * 10)
-                leverage = base_leverage * confidence_multiplier * volatility_multiplier
+                    leverage = base_leverage * confidence_multiplier * volatility_multiplier
                     leverage = max(5.0, min(25.0, leverage))
                 else:
                     # Обычная уверенность
@@ -797,7 +762,7 @@ class RealTimeAIEngine:
                     'leverage': leverage,
                     'analysis': main_analysis,
                     'mtf_analysis': analysis_results,
-                    'onchain_data': onchain_data # Добавляем onchain_data в сигнал
+                    'onchain_data': onchain_data
                 }
             
             return None  # Слишком низкая уверенность
@@ -805,6 +770,352 @@ class RealTimeAIEngine:
         except Exception as e:
             print(f"❌ Error combining analysis: {e}")
             return None
+
+class OnChainAnalyzer:
+    """On-chain анализ через Dune Analytics и внешние API"""
+    
+    def __init__(self):
+        self.dune_api_key = EXTERNAL_APIS['dune']['api_key']
+        self.crypto_panic_key = EXTERNAL_APIS['crypto_panic']['api_key']
+        self.cache = {}
+        self.cache_timeout = 300  # 5 минут
+    
+    async def get_onchain_metrics(self, symbol: str) -> Dict:
+        """Получение on-chain метрик"""
+        try:
+            cache_key = f"onchain_{symbol}"
+            current_time = time.time()
+            
+            # Проверяем кэш
+            if cache_key in self.cache:
+                cached_data, cache_time = self.cache[cache_key]
+                if current_time - cache_time < self.cache_timeout:
+                    return cached_data
+            
+            # Получаем данные параллельно
+            whale_activity = await self._get_whale_activity(symbol)
+            exchange_flows = await self._get_exchange_flows(symbol)
+            social_sentiment = await self._get_social_sentiment(symbol)
+            
+            onchain_data = {
+                'whale_activity': whale_activity,
+                'exchange_flows': exchange_flows,
+                'social_sentiment': social_sentiment,
+                'timestamp': current_time
+            }
+            
+            # Кэшируем
+            self.cache[cache_key] = (onchain_data, current_time)
+            return onchain_data
+            
+        except Exception as e:
+            print(f"❌ OnChain analysis error for {symbol}: {e}")
+            return {}
+    
+    async def _get_whale_activity(self, symbol: str) -> Dict:
+        """РЕАЛЬНЫЙ анализ активности китов через Dune Analytics"""
+        try:
+            # Реальный запрос к Dune Analytics API
+            base_url = EXTERNAL_APIS['dune']['base_url']
+            api_key = self.dune_api_key
+            query_id = EXTERNAL_APIS['dune']['query_id']
+            
+            # Подготавливаем символ для запроса
+            clean_symbol = symbol.replace('/USDT', '').upper()
+            
+            headers = {
+                'X-Dune-API-Key': api_key,
+                'Content-Type': 'application/json'
+            }
+            
+            # Запрос к Dune API
+            url = f"{base_url}/query/{query_id}/results"
+            params = {
+                'limit': 100,
+                'offset': 0
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers, params=params, timeout=15) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        if data.get('result') and data['result'].get('rows'):
+                            # Анализируем данные о крупных транзакциях
+                            rows = data['result']['rows']
+                            
+                            # Фильтруем по нашему символу если возможно
+                            relevant_rows = [row for row in rows if clean_symbol in str(row).upper()]
+                            
+                            if not relevant_rows:
+                                relevant_rows = rows[:10]  # Берем первые 10 записей
+                            
+                            # Анализируем активность
+                            large_transactions = len(relevant_rows)
+                            
+                            # Считаем общий объем
+                            total_volume = 0
+                            for row in relevant_rows:
+                                # Ищем поля с объемом (могут называться по-разному)
+                                for key, value in row.items():
+                                    if 'amount' in key.lower() or 'volume' in key.lower():
+                                        try:
+                                            total_volume += float(value)
+                                        except:
+                                            continue
+                            
+                            # Определяем уровень активности
+                            if large_transactions > 50 or total_volume > 10000000:
+                                activity_level = "very_high"
+                                description = "Очень высокая активность китов"
+                                whale_score = 85
+                            elif large_transactions > 20 or total_volume > 5000000:
+                                activity_level = "high"
+                                description = "Высокая активность китов"
+                                whale_score = 70
+                            elif large_transactions > 10 or total_volume > 1000000:
+                                activity_level = "moderate"
+                                description = "Умеренная активность китов"
+                                whale_score = 55
+                            else:
+                                activity_level = "low"
+                                description = "Низкая активность китов"
+                                whale_score = 35
+                            
+                            return {
+                                'score': whale_score,
+                                'level': activity_level,
+                                'description': description,
+                                'large_transactions': large_transactions,
+                                'net_flow': total_volume,
+                                'data_source': 'dune_analytics'
+                            }
+            
+            # Fallback если API недоступен - используем CoinGecko
+            return await self._get_whale_activity_fallback(symbol)
+            
+        except Exception as e:
+            print(f"❌ Dune API whale activity error: {e}")
+            return await self._get_whale_activity_fallback(symbol)
+    
+    async def _get_whale_activity_fallback(self, symbol: str) -> Dict:
+        """Fallback анализ активности через CoinGecko API"""
+        try:
+            clean_symbol = symbol.replace('/USDT', '').lower()
+            
+            # Получаем данные о монете через CoinGecko
+            url = f"https://api.coingecko.com/api/v3/coins/{clean_symbol}"
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, timeout=10) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        # Анализируем объем торгов и изменение цены
+                        market_data = data.get('market_data', {})
+                        total_volume = market_data.get('total_volume', {}).get('usd', 0)
+                        price_change_24h = market_data.get('price_change_percentage_24h', 0)
+                        
+                        # Определяем активность на основе объема и волатильности
+                        if total_volume > 1000000000 and abs(price_change_24h) > 10:
+                            whale_score = 80
+                            activity_level = "very_high"
+                            description = "Очень высокая активность (высокий объем + волатильность)"
+                        elif total_volume > 500000000 and abs(price_change_24h) > 5:
+                            whale_score = 65
+                            activity_level = "high"
+                            description = "Высокая активность"
+                        elif total_volume > 100000000:
+                            whale_score = 50
+                            activity_level = "moderate"
+                            description = "Умеренная активность"
+                        else:
+                            whale_score = 30
+                            activity_level = "low"
+                            description = "Низкая активность"
+                        
+                        return {
+                            'score': whale_score,
+                            'level': activity_level,
+                            'description': description,
+                            'large_transactions': int(total_volume / 1000000),  # Приблизительно
+                            'net_flow': total_volume,
+                            'data_source': 'coingecko_fallback'
+                        }
+            
+            # Последний fallback
+            return {
+                'score': 45,
+                'level': 'moderate',
+                'description': 'Умеренная активность (данные недоступны)',
+                'large_transactions': 15,
+                'net_flow': 0,
+                'data_source': 'fallback'
+            }
+            
+        except Exception as e:
+            print(f"❌ Whale activity fallback error: {e}")
+            return {
+                'score': 40,
+                'level': 'unknown',
+                'description': 'Данные недоступны',
+                'large_transactions': 0,
+                'net_flow': 0,
+                'data_source': 'error'
+            }
+    
+    async def _get_exchange_flows(self, symbol: str) -> Dict:
+        """РЕАЛЬНЫЙ анализ потоков на биржи через CoinGecko API"""
+        try:
+            clean_symbol = symbol.replace('/USDT', '').lower()
+            
+            # Получаем данные о рыночных показателях
+            url = f"https://api.coingecko.com/api/v3/coins/{clean_symbol}/market_chart"
+            params = {
+                'vs_currency': 'usd',
+                'days': '7',  # Данные за неделю
+                'interval': 'daily'
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=10) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        prices = data.get('prices', [])
+                        volumes = data.get('total_volumes', [])
+                        
+                        if len(prices) >= 2 and len(volumes) >= 2:
+                            # Анализируем тренд цены и объема
+                            recent_prices = [p[1] for p in prices[-3:]]  # Последние 3 дня
+                            recent_volumes = [v[1] for v in volumes[-3:]]  # Последние 3 дня
+                            
+                            # Тренд цены
+                            price_trend = (recent_prices[-1] - recent_prices[0]) / recent_prices[0] * 100
+                            
+                            # Тренд объема
+                            avg_volume_recent = sum(recent_volumes) / len(recent_volumes)
+                            avg_volume_week = sum([v[1] for v in volumes]) / len(volumes)
+                            volume_change = (avg_volume_recent - avg_volume_week) / avg_volume_week * 100
+                            
+                            # Определяем потоки на основе корреляции цены и объема
+                            if price_trend < -5 and volume_change > 20:
+                                # Цена падает, объем растет = приток на биржи (продажи)
+                                flow_sentiment = "bearish"
+                                description = "Большой приток на биржи (медвежий сигнал)"
+                                net_flow = -avg_volume_recent
+                            elif price_trend > 5 and volume_change > 20:
+                                # Цена растет, объем растет = активные покупки
+                                flow_sentiment = "bullish"
+                                description = "Активные покупки (бычий сигнал)"
+                                net_flow = avg_volume_recent
+                            elif price_trend > 2 and volume_change < -10:
+                                # Цена растет, объем падает = отток с бирж (ходл)
+                                flow_sentiment = "bullish"
+                                description = "Отток с бирж, ходлинг (бычий сигнал)"
+                                net_flow = avg_volume_recent * 0.5
+                            else:
+                                flow_sentiment = "neutral"
+                                description = "Нейтральные потоки"
+                                net_flow = 0
+                            
+                            return {
+                                'inflow': max(0, -net_flow) if net_flow < 0 else 0,
+                                'outflow': max(0, net_flow) if net_flow > 0 else 0,
+                                'net_flow': net_flow,
+                                'sentiment': flow_sentiment,
+                                'description': description,
+                                'price_trend': price_trend,
+                                'volume_change': volume_change,
+                                'data_source': 'coingecko'
+                            }
+            
+            # Fallback
+            return {
+                'inflow': 0,
+                'outflow': 0,
+                'net_flow': 0,
+                'sentiment': 'neutral',
+                'description': 'Нейтральные потоки (данные недоступны)',
+                'data_source': 'fallback'
+            }
+            
+        except Exception as e:
+            print(f"❌ Exchange flows error: {e}")
+            return {
+                'inflow': 0,
+                'outflow': 0,
+                'net_flow': 0,
+                'sentiment': 'neutral',
+                'description': 'Данные недоступны',
+                'data_source': 'error'
+            }
+    
+    async def _get_social_sentiment(self, symbol: str) -> Dict:
+        """Анализ социального настроения через CryptoPanic"""
+        try:
+            # Реальный запрос к CryptoPanic API
+            url = f"{EXTERNAL_APIS['crypto_panic']['base_url']}/posts/"
+            params = {
+                'auth_token': self.crypto_panic_key,
+                'currencies': symbol.replace('/USDT', ''),
+                'kind': 'news',
+                'filter': 'rising'
+            }
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, params=params, timeout=10) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        
+                        if data.get('results'):
+                            # Анализируем новости
+                            positive_count = 0
+                            negative_count = 0
+                            total_count = len(data['results'])
+                            
+                            for post in data['results'][:10]:  # Берем первые 10 новостей
+                                votes = post.get('votes', {})
+                                if votes.get('positive', 0) > votes.get('negative', 0):
+                                    positive_count += 1
+                                elif votes.get('negative', 0) > votes.get('positive', 0):
+                                    negative_count += 1
+                            
+                            if total_count > 0:
+                                sentiment_score = (positive_count - negative_count) / total_count * 100
+                            else:
+                                sentiment_score = 0
+                            
+                            if sentiment_score > 20:
+                                sentiment = "bullish"
+                                description = "Позитивные новости преобладают"
+                            elif sentiment_score < -20:
+                                sentiment = "bearish"
+                                description = "Негативные новости преобладают"
+                            else:
+                                sentiment = "neutral"
+                                description = "Смешанные новости"
+                            
+                            return {
+                                'score': sentiment_score,
+                                'sentiment': sentiment,
+                                'description': description,
+                                'news_count': total_count,
+                                'positive_news': positive_count,
+                                'negative_news': negative_count
+                            }
+            
+            # Fallback если API недоступен
+            return {
+                'score': 0,
+                'sentiment': 'neutral',
+                'description': 'Нейтральные новости',
+                'news_count': 0
+            }
+            
+        except Exception as e:
+            print(f"❌ Social sentiment error: {e}")
+            return {'sentiment': 'neutral', 'description': 'Данные недоступны'}
 
 class TelegramBot:
     """Telegram бот для отправки сигналов и управления"""
@@ -1253,20 +1564,20 @@ def explain_signal(signal: Dict, analysis: Dict, mtf_analysis: Dict = None, onch
             warnings.append("MTF Consensus == \"sell\" или \"strong_sell\"")
         else:
             explanations.append("• Смешанное подтверждение тренда")
-    
-        # ИСПРАВЛЕНО: Проверяем реальную несовместимость таймфреймов
+        
+        # Проверяем реальную несовместимость таймфреймов
         if abs(positive_count - negative_count) <= 1 and tf_count >= 3:
             warnings.append("❗️Таймфреймы несовместимы (смешанные сигналы)")
     
     # Пробой уровней
     explanations.append("• Пробитый на 15-минутном графике уровень поддержки был повторно протестирован на 5-минутном графике и выступил в качестве поддержки")
     
-    # ИСПРАВЛЕНО: Volume Spike предупреждение только если реально нет спайка
+    # Volume Spike предупреждение только если реально нет спайка
     volume_ratio = analysis.get('volume_ratio', 1.0)
     if volume_ratio < 1.2:
         warnings.append("❗️Нет Volume Spike (низкий объем торгов)")
     
-    # ИСПРАВЛЕНО: Stochastic RSI предупреждение только при реально слабом сигнале
+    # Stochastic RSI предупреждение только при реально слабом сигнале
     stoch_k = analysis.get('stoch_k', 50)
     if stoch_k < 40 and signal.get('action', '').startswith('BUY'):
         warnings.append("❗️Слабое подтверждение направления Stoch RSI (медвежий импульс)")
@@ -1288,353 +1599,7 @@ def explain_signal(signal: Dict, analysis: Dict, mtf_analysis: Dict = None, onch
     
     return result
 
-class OnChainAnalyzer:
-    """On-chain анализ через Dune Analytics и внешние API"""
-    
-    def __init__(self):
-        self.dune_api_key = EXTERNAL_APIS['dune']['api_key']
-        self.crypto_panic_key = EXTERNAL_APIS['crypto_panic']['api_key']
-        self.cache = {}
-        self.cache_timeout = 300  # 5 минут
-    
-    async def get_onchain_metrics(self, symbol: str) -> Dict:
-        """Получение on-chain метрик"""
-        try:
-            cache_key = f"onchain_{symbol}"
-            current_time = time.time()
-            
-            # Проверяем кэш
-            if cache_key in self.cache:
-                cached_data, cache_time = self.cache[cache_key]
-                if current_time - cache_time < self.cache_timeout:
-                    return cached_data
-            
-            # Получаем данные параллельно
-            whale_activity = await self._get_whale_activity(symbol)
-            exchange_flows = await self._get_exchange_flows(symbol)
-            social_sentiment = await self._get_social_sentiment(symbol)
-            
-            onchain_data = {
-                'whale_activity': whale_activity,
-                'exchange_flows': exchange_flows,
-                'social_sentiment': social_sentiment,
-                'timestamp': current_time
-            }
-            
-            # Кэшируем
-            self.cache[cache_key] = (onchain_data, current_time)
-            return onchain_data
-            
-        except Exception as e:
-            print(f"❌ OnChain analysis error for {symbol}: {e}")
-            return {}
-    
-    async def _get_whale_activity(self, symbol: str) -> Dict:
-        """РЕАЛЬНЫЙ анализ активности китов через Dune Analytics"""
-        try:
-            # Реальный запрос к Dune Analytics API
-            base_url = EXTERNAL_APIS['dune']['base_url']
-            api_key = self.dune_api_key
-            query_id = EXTERNAL_APIS['dune']['query_id']
-            
-            # Подготавливаем символ для запроса
-            clean_symbol = symbol.replace('/USDT', '').upper()
-            
-            headers = {
-                'X-Dune-API-Key': api_key,
-                'Content-Type': 'application/json'
-            }
-            
-            # Запрос к Dune API
-            url = f"{base_url}/query/{query_id}/results"
-            params = {
-                'limit': 100,
-                'offset': 0
-            }
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers, params=params, timeout=15) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        
-                        if data.get('result') and data['result'].get('rows'):
-                            # Анализируем данные о крупных транзакциях
-                            rows = data['result']['rows']
-                            
-                            # Фильтруем по нашему символу если возможно
-                            relevant_rows = [row for row in rows if clean_symbol in str(row).upper()]
-                            
-                            if not relevant_rows:
-                                relevant_rows = rows[:10]  # Берем первые 10 записей
-                            
-                            # Анализируем активность
-                            large_transactions = len(relevant_rows)
-                            
-                            # Считаем общий объем
-                            total_volume = 0
-                            for row in relevant_rows:
-                                # Ищем поля с объемом (могут называться по-разному)
-                                for key, value in row.items():
-                                    if 'amount' in key.lower() or 'volume' in key.lower():
-                                        try:
-                                            total_volume += float(value)
-                                        except:
-                                            continue
-                            
-                            # Определяем уровень активности
-                            if large_transactions > 50 or total_volume > 10000000:
-                                activity_level = "very_high"
-                                description = "Очень высокая активность китов"
-                                whale_score = 85
-                            elif large_transactions > 20 or total_volume > 5000000:
-                                activity_level = "high"
-                                description = "Высокая активность китов"
-                                whale_score = 70
-                            elif large_transactions > 10 or total_volume > 1000000:
-                                activity_level = "moderate"
-                                description = "Умеренная активность китов"
-                                whale_score = 55
-                            else:
-                                activity_level = "low"
-                                description = "Низкая активность китов"
-                                whale_score = 35
-                            
-                            return {
-                                'score': whale_score,
-                                'level': activity_level,
-                                'description': description,
-                                'large_transactions': large_transactions,
-                                'net_flow': total_volume,
-                                'data_source': 'dune_analytics'
-                            }
-            
-            # Fallback если API недоступен - используем CoinGecko
-            return await self._get_whale_activity_fallback(symbol)
-            
-        except Exception as e:
-            print(f"❌ Dune API whale activity error: {e}")
-            return await self._get_whale_activity_fallback(symbol)
-    
-    async def _get_whale_activity_fallback(self, symbol: str) -> Dict:
-        """Fallback анализ активности через CoinGecko API"""
-        try:
-            clean_symbol = symbol.replace('/USDT', '').lower()
-            
-            # Получаем данные о монете через CoinGecko
-            url = f"https://api.coingecko.com/api/v3/coins/{clean_symbol}"
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=10) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        
-                        # Анализируем объем торгов и изменение цены
-                        market_data = data.get('market_data', {})
-                        total_volume = market_data.get('total_volume', {}).get('usd', 0)
-                        price_change_24h = market_data.get('price_change_percentage_24h', 0)
-                        
-                        # Определяем активность на основе объема и волатильности
-                        if total_volume > 1000000000 and abs(price_change_24h) > 10:
-                            whale_score = 80
-                            activity_level = "very_high"
-                            description = "Очень высокая активность (высокий объем + волатильность)"
-                        elif total_volume > 500000000 and abs(price_change_24h) > 5:
-                            whale_score = 65
-                            activity_level = "high"
-                            description = "Высокая активность"
-                        elif total_volume > 100000000:
-                            whale_score = 50
-                            activity_level = "moderate"
-                            description = "Умеренная активность"
-                        else:
-                            whale_score = 30
-                            activity_level = "low"
-                            description = "Низкая активность"
-                        
-                        return {
-                            'score': whale_score,
-                            'level': activity_level,
-                            'description': description,
-                            'large_transactions': int(total_volume / 1000000),  # Приблизительно
-                            'net_flow': total_volume,
-                            'data_source': 'coingecko_fallback'
-                        }
-            
-            # Последний fallback
-            return {
-                'score': 45,
-                'level': 'moderate',
-                'description': 'Умеренная активность (данные недоступны)',
-                'large_transactions': 15,
-                'net_flow': 0,
-                'data_source': 'fallback'
-            }
-            
-        except Exception as e:
-            print(f"❌ Whale activity fallback error: {e}")
-            return {
-                'score': 40,
-                'level': 'unknown',
-                'description': 'Данные недоступны',
-                'large_transactions': 0,
-                'net_flow': 0,
-                'data_source': 'error'
-            }
-    
-    async def _get_exchange_flows(self, symbol: str) -> Dict:
-        """РЕАЛЬНЫЙ анализ потоков на биржи через CoinGecko API"""
-        try:
-            clean_symbol = symbol.replace('/USDT', '').lower()
-            
-            # Получаем данные о рыночных показателях
-            url = f"https://api.coingecko.com/api/v3/coins/{clean_symbol}/market_chart"
-            params = {
-                'vs_currency': 'usd',
-                'days': '7',  # Данные за неделю
-                'interval': 'daily'
-            }
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, timeout=10) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        
-                        prices = data.get('prices', [])
-                        volumes = data.get('total_volumes', [])
-                        
-                        if len(prices) >= 2 and len(volumes) >= 2:
-                            # Анализируем тренд цены и объема
-                            recent_prices = [p[1] for p in prices[-3:]]  # Последние 3 дня
-                            recent_volumes = [v[1] for v in volumes[-3:]]  # Последние 3 дня
-                            
-                            # Тренд цены
-                            price_trend = (recent_prices[-1] - recent_prices[0]) / recent_prices[0] * 100
-                            
-                            # Тренд объема
-                            avg_volume_recent = sum(recent_volumes) / len(recent_volumes)
-                            avg_volume_week = sum([v[1] for v in volumes]) / len(volumes)
-                            volume_change = (avg_volume_recent - avg_volume_week) / avg_volume_week * 100
-                            
-                            # Определяем потоки на основе корреляции цены и объема
-                            if price_trend < -5 and volume_change > 20:
-                                # Цена падает, объем растет = приток на биржи (продажи)
-                                flow_sentiment = "bearish"
-                                description = "Большой приток на биржи (медвежий сигнал)"
-                                net_flow = -avg_volume_recent
-                            elif price_trend > 5 and volume_change > 20:
-                                # Цена растет, объем растет = активные покупки
-                                flow_sentiment = "bullish"
-                                description = "Активные покупки (бычий сигнал)"
-                                net_flow = avg_volume_recent
-                            elif price_trend > 2 and volume_change < -10:
-                                # Цена растет, объем падает = отток с бирж (ходл)
-                                flow_sentiment = "bullish"
-                                description = "Отток с бирж, ходлинг (бычий сигнал)"
-                                net_flow = avg_volume_recent * 0.5
-                            else:
-                                flow_sentiment = "neutral"
-                                description = "Нейтральные потоки"
-                                net_flow = 0
-                            
-                            return {
-                                'inflow': max(0, -net_flow) if net_flow < 0 else 0,
-                                'outflow': max(0, net_flow) if net_flow > 0 else 0,
-                                'net_flow': net_flow,
-                                'sentiment': flow_sentiment,
-                                'description': description,
-                                'price_trend': price_trend,
-                                'volume_change': volume_change,
-                                'data_source': 'coingecko'
-                            }
-            
-            # Fallback
-            return {
-                'inflow': 0,
-                'outflow': 0,
-                'net_flow': 0,
-                'sentiment': 'neutral',
-                'description': 'Нейтральные потоки (данные недоступны)',
-                'data_source': 'fallback'
-            }
-            
-        except Exception as e:
-            print(f"❌ Exchange flows error: {e}")
-            return {
-                'inflow': 0,
-                'outflow': 0,
-                'net_flow': 0,
-                'sentiment': 'neutral',
-                'description': 'Данные недоступны',
-                'data_source': 'error'
-            }
-    
-    async def _get_social_sentiment(self, symbol: str) -> Dict:
-        """Анализ социального настроения через CryptoPanic"""
-        try:
-            # Реальный запрос к CryptoPanic API
-            url = f"{EXTERNAL_APIS['crypto_panic']['base_url']}/posts/"
-            params = {
-                'auth_token': self.crypto_panic_key,
-                'currencies': symbol.replace('/USDT', ''),
-                'kind': 'news',
-                'filter': 'rising'
-            }
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params, timeout=10) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        
-                        if data.get('results'):
-                            # Анализируем новости
-                            positive_count = 0
-                            negative_count = 0
-                            total_count = len(data['results'])
-                            
-                            for post in data['results'][:10]:  # Берем первые 10 новостей
-                                votes = post.get('votes', {})
-                                if votes.get('positive', 0) > votes.get('negative', 0):
-                                    positive_count += 1
-                                elif votes.get('negative', 0) > votes.get('positive', 0):
-                                    negative_count += 1
-                            
-                            if total_count > 0:
-                                sentiment_score = (positive_count - negative_count) / total_count * 100
-                            else:
-                                sentiment_score = 0
-                            
-                            if sentiment_score > 20:
-                                sentiment = "bullish"
-                                description = "Позитивные новости преобладают"
-                            elif sentiment_score < -20:
-                                sentiment = "bearish"
-                                description = "Негативные новости преобладают"
-                            else:
-                                sentiment = "neutral"
-                                description = "Смешанные новости"
-                            
-                            return {
-                                'score': sentiment_score,
-                                'sentiment': sentiment,
-                                'description': description,
-                                'news_count': total_count,
-                                'positive_news': positive_count,
-                                'negative_news': negative_count
-                            }
-            
-            # Fallback если API недоступен
-            return {
-                'score': 0,
-                'sentiment': 'neutral',
-                'description': 'Нейтральные новости',
-                'news_count': 0
-            }
-            
-        except Exception as e:
-            print(f"❌ Social sentiment error: {e}")
-            return {'sentiment': 'neutral', 'description': 'Данные недоступны'}
-
-class AlphaSignalBot:
+class SignalProBot:
     """Основной бот с системой Best Alpha Only + Скальпинг"""
     
     def __init__(self):
@@ -1890,6 +1855,7 @@ class AlphaSignalBot:
             
             # Показываем оценку качества если есть
             quality_score = 0
+            filter_details = signal.get('filter_details', [])
             for detail in filter_details:
                 if "Согласованность ТФ" in detail or "тренд" in detail or "импульс" in detail:
                     quality_score += 1
@@ -1904,7 +1870,6 @@ class AlphaSignalBot:
             message += f"🕒 Время: {datetime.now().strftime('%H:%M:%S')}\n\n"
             
             # Детали фильтров (показываем самые важные)
-            filter_details = signal.get('filter_details', [])
             if filter_details:
                 message += "🔍 **Ключевые факторы:**\n"
                 # Показываем только качественные индикаторы
@@ -1932,7 +1897,7 @@ class AlphaSignalBot:
 
 async def main():
     """Основная функция"""
-    bot = AlphaSignalBot()
+    bot = SignalProBot()
     bot.telegram_bot.set_bot_instance(bot)  # Устанавливаем ссылку на бота в телеграм бот
     
     try:
