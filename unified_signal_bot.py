@@ -20,6 +20,7 @@ from config import TELEGRAM_CONFIG, EXCHANGE_KEYS, EXTERNAL_APIS, TRADING_CONFIG
 from scalping_engine import ScalpingSignalEngine
 import sys
 import io
+from ws_manager import BinanceWSManager
 
 # 200+ торговых пар из конфигурации
 TRADING_PAIRS = TRADING_CONFIG['pairs'][:200]  # Берем первые 200 пар
@@ -66,6 +67,10 @@ class UniversalDataManager:
         self.cache = {}
         self.cache_timeout = 60  # секунды
         
+        # WebSocket менеджер (Binance)
+        self.ws = BinanceWSManager(max_candles=300)
+        self.ws_started = False
+        
         # Инициализируем биржи через ccxt
         self.binance = ccxt.binance({
             'apiKey': EXCHANGE_KEYS['binance']['key'],
@@ -101,10 +106,22 @@ class UniversalDataManager:
         
         print("✅ Биржи инициализированы: Binance, Bybit, OKX")
         
+    async def ensure_ws(self, symbols: List[str], timeframes: List[str]):
+        if not self.ws_started:
+            # Запускаем подписки только на поддерживаемые Binance символы
+            await self.ws.subscribe_many(symbols, [tf for tf in timeframes if tf in ['1m','3m','5m','15m','1h','4h']])
+            self.ws_started = True
+    
     async def get_multi_timeframe_data(self, symbol: str, timeframes: List[str]) -> Dict:
         """Получение РЕАЛЬНЫХ OHLCV данных для нескольких таймфреймов с умным fallback"""
         try:
             current_time = time.time()
+            
+            # Стартуем WS подписки при первом вызове
+            try:
+                await self.ensure_ws([symbol], timeframes)
+            except Exception:
+                pass
             
             # Проверяем кэш
             cache_key = f"{symbol}_{'_'.join(timeframes)}"
@@ -113,12 +130,32 @@ class UniversalDataManager:
                 if current_time - cache_time < self.cache_timeout:
                     return cached_data
             
-            # Получаем данные с приоритетом по биржам
             data = {}
+            # 1) Сначала пробуем взять из WS-кэша
             for tf in timeframes:
-                tf_data = await self._get_best_timeframe_data(symbol, tf)
-                if tf_data:
-                    data[tf] = tf_data
+                ws_candles = self.ws.get_cached_ohlcv(symbol, tf)
+                if ws_candles and len(ws_candles) >= 50:
+                    last = ws_candles[-1]
+                    data[tf] = {
+                        'historical_data': ws_candles[-200:],
+                        'current': {
+                            'open': last['open'],
+                            'high': last['high'],
+                            'low': last['low'],
+                            'close': last['close'],
+                            'volume': last['volume'],
+                            'timestamp': last['timestamp']
+                        },
+                        'exchange': 'binance',
+                        'symbol': symbol
+                    }
+            
+            # 2) Для недостающих таймфреймов — REST fallback
+            for tf in timeframes:
+                if tf not in data:
+                    tf_data = await self._get_best_timeframe_data(symbol, tf)
+                    if tf_data:
+                        data[tf] = tf_data
             
             # Кэшируем только если есть данные
             if data:
@@ -1176,6 +1213,9 @@ class TelegramBot:
         self.chat_id = TELEGRAM_CONFIG['chat_id']
         self.admin_chat_id = TELEGRAM_CONFIG.get('admin_chat_id', self.chat_id)  # Админский чат
         self.bot_instance = None  # Ссылка на основной бот
+        # Троттлинг ошибок
+        self._last_err_log_ts = 0.0
+        self._err_log_interval_sec = 30.0
     
     def set_bot_instance(self, bot_instance):
         """Устанавливаем ссылку на основной бот для управления"""
@@ -1185,6 +1225,12 @@ class TelegramBot:
         """Создаёт HTTP-сессию для Telegram с отключённой SSL-проверкой (фикс SSL ошибок)."""
         connector = aiohttp.TCPConnector(ssl=False)
         return aiohttp.ClientSession(connector=connector)
+    
+    def _log_error_throttled(self, prefix: str, err: Exception):
+        now = time.time()
+        if now - self._last_err_log_ts >= self._err_log_interval_sec:
+            print(f"❌ {prefix}: {err}")
+            self._last_err_log_ts = now
     
     async def send_message(self, message: str, chat_id: str = None) -> bool:
         """Отправка сообщения в Telegram"""
@@ -1205,7 +1251,7 @@ class TelegramBot:
                         return result.get('ok', False)
         
         except Exception as e:
-            print(f"❌ Telegram error: {e}")
+            self._log_error_throttled("Telegram error", e)
         
         return False
     
@@ -1217,18 +1263,19 @@ class TelegramBot:
             async with self._session() as session:
                 await session.get(url, params=params, timeout=10)
         except Exception as e:
-            print(f"❌ deleteWebhook error: {e}")
+            self._log_error_throttled("deleteWebhook error", e)
     
     async def start_webhook_listener(self):
         """Запуск прослушивания команд Telegram"""
         try:
-            # Обеспечиваем polling-режим (на случай, если webhook активен)
+            # Обеспечиваем polling-режим один раз при запуске
             await self._ensure_polling_mode()
             
             # Получаем обновления
             url = f"https://api.telegram.org/bot{self.bot_token}/getUpdates"
             params = {'offset': -1, 'limit': 1, 'timeout': 10}
             
+            backoff = 1
             while True:
                 try:
                     async with self._session() as session:
@@ -1239,17 +1286,17 @@ class TelegramBot:
                                     for update in data['result']:
                                         await self._process_update(update)
                                         params['offset'] = update['update_id'] + 1
-                
-                    await asyncio.sleep(2)  # Проверяем каждые 2 секунды
+                    # успех — сбрасываем backoff
+                    backoff = 1
+                    await asyncio.sleep(2)
                 
                 except Exception as e:
-                    print(f"❌ Webhook listener error: {e}")
-                    await asyncio.sleep(5)
-                    # Переустановим polling, если была ошибка
-                    await self._ensure_polling_mode()
+                    self._log_error_throttled("Webhook listener error", e)
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, 60)
                     
         except Exception as e:
-            print(f"❌ Failed to start webhook listener: {e}")
+            self._log_error_throttled("Failed to start webhook listener", e)
     
     async def _process_update(self, update):
         """Обработка обновлений от Telegram"""
@@ -1708,6 +1755,14 @@ class UnifiedSignalBot:
             'scalping_sent': 0,
             'errors': 0
         }
+        
+        # Предзапуск WS-подписок для скальпинг пар
+        try:
+            asyncio.get_event_loop().create_task(
+                self.data_manager.ensure_ws(self.scalping_pairs, ['1m','5m','15m'])
+            )
+        except Exception:
+            pass
     
     async def start(self):
         """Запуск бота"""
