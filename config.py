@@ -17,17 +17,17 @@ TELEGRAM_CONFIG = {
 # API ключи для бирж
 EXCHANGE_KEYS = {
     'binance': {
-        'key': 'VizcewpbtrHu0ffMuNtHwoBZVey2bMmoWfIilzeg5500lo4QVQXg6HUkxQsMPZpE',
-        'secret': 'OPABnl1iwGkAaP4mbD8o9Z2Re6ENsm7YciiRThQvx4Y5R1Hrp9AawPmI0daS1OD1'
+        'key': 'NEdNOs4i396D0Xb6Qp2n885jNKrT8FVZsTnQbheIzvPHfhsZCsmasL3CXVTXXiQ6',
+        'secret': 'nCnO0x0QZwJkXj8VFabDKP3klf4Ebzt4yJgiglDdvjAuiIFx9IdvVvsxk3zuNBCQ'
     },
     'bybit': {
-        'key': 'mWoHS9ONHT2EzePncI',
-        'secret': 'b3rUJND24b9OPlmmwKo4Qv6E0ipqYUHTXr9x'
+        'key': 'dbO1Q0HOsiPXS9rQa8',
+        'secret': 'zEULSUmCXhOkAhP8KLJqyqnFaxvO59ATTFTc'
     },
     'okx': {
-        'key': 'a7f94985-9865-495f-a3f9-e681ab17492d',
-        'secret': '5BE33E5B1802F25F08D28D902EB71970',
-        'passphrase': 'Baks1982.'
+        'key': '3f6b8393-36bd-48fa-9051-061954be1882',
+        'secret': '559B87BC72A45922FEE6A0874E3B3D07',
+        'passphrase': 'Tims1982@'
     }
 }
 
@@ -43,13 +43,13 @@ EXTERNAL_APIS = {
         'base_url': 'https://cryptopanic.com/api/developer/v2'
     },
     'twitter': {
-        'api_key': 'your_twitter_api_key_here',
-        'api_secret': 'your_twitter_api_secret_here',
-        'bearer_token': 'your_twitter_bearer_token_here',
+        'api_key': 'SwRphJeF987vGpn0mXedNKPbZ',
+        'api_secret': 'Ubjkw6EWqRHrHmUEpF0hX9xjkXoaVyzTHc4H21O8x1gcX2ve3y',
+        'bearer_token': 'AAAAAAAAAAAAAAAAAAAAAJJ53QEAAAAAD0rBYGg55mJ%2BDVOw9L%2Bf6g23g%2FY%3Dp29zmZyMQqGjC3s1TLbFXS6sRWGQ0LF28NT44Fyg8Hd5nTdUcQ',
         'app_id': '31291794'
     },
     'coingecko': {
-        'api_key': 'CG-your-api-key-here',
+        'api_key': 'CG-TyedrrKDMCFt9McbTZCXN3mi',
         'base_url': 'https://api.coingecko.com/api/v3'
     }
 }
