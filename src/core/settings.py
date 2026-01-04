@@ -16,9 +16,9 @@ class Settings(BaseSettings):
     binance_secret: str = 'ВАШ_BINANCE_SECRET'
     bybit_key: str = 'ВАШ_BYBIT_API_KEY'
     bybit_secret: str = 'ВАШ_BYBIT_SECRET'
-    okx_key: str = 'ВАШ_OKX_API_KEY'
-    okx_secret: str = 'ВАШ_OKX_SECRET'
-    okx_passphrase: str = 'ВАШ_OKX_PASSPHRASE'
+    okx_key: str = 'ВАШ_OKX_API_KEY'    # BingX
+    bingx_key: str = ""
+    bingx_secret: str = ""
 
     # External APIs
     dune_api_key: str = 'ВАШ_DUNE_API_KEY'

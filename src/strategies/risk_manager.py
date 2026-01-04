@@ -96,17 +96,29 @@ class DynamicRiskManager:
         
         stop_distance = max(min_stop, stop_dist)
         
-        if trend_direction == 'long':
-            sl = entry_price - stop_distance
-            tp1 = entry_price + stop_distance * 2.0
-            tp2 = entry_price + stop_distance * 3.0
+        # Determine TP multipliers based on volatility (Original ProductionAIEngine Logic)
+        if volatility > 0.03:
+            tp_multipliers = [1.5, 2.0, 2.5]
+        elif volatility > 0.015:
+            tp_multipliers = [2.0, 2.5, 3.0]
         else:
-            sl = entry_price + stop_distance
-            tp1 = entry_price - stop_distance * 2.0
-            tp2 = entry_price - stop_distance * 3.0
+            tp_multipliers = [2.5, 3.0, 4.0]
+
+        if trend_direction == 'long':
+            stop_loss = entry_price - stop_distance
+            tp1 = entry_price + stop_distance * tp_multipliers[0]
+            tp2 = entry_price + stop_distance * tp_multipliers[1]
+            tp3 = entry_price + stop_distance * tp_multipliers[2]
+            take_profits = (tp1, tp2, tp3)
+        else:
+            stop_loss = entry_price + stop_distance
+            tp1 = entry_price - stop_distance * tp_multipliers[0]
+            tp2 = entry_price - stop_distance * tp_multipliers[1]
+            tp3 = entry_price - stop_distance * tp_multipliers[2]
+            take_profits = (tp1, tp2, tp3)
             
         return {
-            'stop_loss': sl,
-            'take_profit': (tp1, tp2),
+            'stop_loss': stop_loss,
+            'take_profit': take_profits,
             'stop_loss_distance': stop_distance
         }

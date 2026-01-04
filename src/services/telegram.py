@@ -69,14 +69,15 @@ class TelegramBot:
 
     async def _handle_command(self, command: str, chat_id: str):
         cmd = command.split()[0]
+        logger.info(f"Received command: {cmd} from {chat_id}")
         
-        if cmd == '/start':
+        if cmd == '/start' or cmd == '/startbot':
             msg = "🤖 <b>Bot Started!</b>\nAnalyze loop is running."
             if self.bot_control_callback:
                 self.bot_control_callback('start')
             await self.send_message(msg, chat_id)
             
-        elif cmd == '/stop':
+        elif cmd == '/stop' or cmd == '/stopbot':
             msg = "🛑 <b>Bot Paused!</b>\nAnalysis loop stopped."
             if self.bot_control_callback:
                 self.bot_control_callback('stop')
@@ -89,8 +90,8 @@ class TelegramBot:
         elif cmd == '/help':
             msg = (
                 "<b>Commands:</b>\n"
-                "/start - Start Bot\n"
-                "/stop - Pause Bot\n"
+                "/startbot - Start Bot\n"
+                "/stopbot - Pause Bot\n"
                 "/status - Check Status\n"
             )
             await self.send_message(msg, chat_id)
