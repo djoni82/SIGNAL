@@ -14,6 +14,8 @@ from src.strategies.feature_engine import SmartFeatureEngineer
 from src.strategies.pattern_validator import PatternValidator
 from src.strategies.risk_manager import DynamicRiskManager
 from src.strategies.ml_engine import CalibratedMLEngine
+from src.strategies.onchain_analyzer import OnChainAnalyzer
+from src.strategies.ai_engine import AdvancedNeuralCore
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,8 @@ class SignalGenerator:
         self.feature_engineer = SmartFeatureEngineer()
         self.risk_manager = DynamicRiskManager()
         self.ml_engine = CalibratedMLEngine()
+        self.ai_neural_core = AdvancedNeuralCore()
+        self.onchain_analyzer = OnChainAnalyzer()
         self.pattern_validator = PatternValidator({}) # Load history on start
         
         self.signal_cache = {}
@@ -65,12 +69,22 @@ class SignalGenerator:
             # 6. Validation
             validation = self.pattern_validator.validate_signal(symbol, features, primary_data['close'].iloc[-1])
 
-            # 7. Combine
-            combined = self._combine_signals(ta_signal, ml_prob, validation, regime, features)
+            # 7. On-Chain Metrics (New)
+            onchain_data = await self.onchain_analyzer.get_metrics(symbol)
+
+            # 8. Neural AI Synthesis (Gemini Upgrade)
+            ai_synthesis = await self.ai_neural_core.process_signal(
+                symbol, primary_data, regime, indicators, onchain_data, features
+            )
+
+            # 9. Combine
+            combined = self._combine_signals(ta_signal, ml_prob, validation, regime, features, ai_synthesis)
             if combined['confidence'] < self.config.min_confidence: return None
 
-            # 8. Risk Management (FULL CALCULATION)
-            final_signal = await self._apply_risk_management(symbol, combined, primary_data, regime, indicators)
+            # 10. Risk Management (FULL CALCULATION)
+            final_signal = await self._apply_risk_management(
+                symbol, combined, primary_data, regime, indicators, onchain_data, ai_synthesis
+            )
             
             self.signal_cache[symbol] = (final_signal, datetime.now())
             return final_signal
@@ -100,11 +114,19 @@ class SignalGenerator:
         
         return {'direction': direction, 'confidence': confidence, 'buy_score': buy_score, 'sell_score': sell_score}
 
-    def _combine_signals(self, ta, ml, val, reg, feat) -> Dict:
+    def _combine_signals(self, ta, ml, val, reg, feat, ai=None) -> Dict:
         base_conf = ta['confidence']
+        
+        # ML heuristic weighting
         if ml > 0.7: base_conf *= 1.2
         elif ml < 0.3: base_conf *= 0.8
         
+        # AI Neural Synthesis Weighting (Gemini)
+        if ai and 'confidence' in ai:
+            # Weighted consensus: 65% TA/ML + 35% AI/On-Chain
+            ai_conf = ai['confidence'] # 0.0 to 1.0 from Gemini
+            base_conf = (base_conf * 0.65) + (ai_conf * 0.35)
+
         base_conf += val.get('confidence_boost', 0)
         if feat.get('volume_ratio', 1) > 1.8: base_conf *= 1.05
         
@@ -121,20 +143,24 @@ class SignalGenerator:
         }
 
     async def _apply_risk_management(self, symbol: str, signal: Dict, data: pd.DataFrame, 
-                                     regime: MarketRegime, indicators: Dict) -> EnhancedSignal:
+                                     regime: MarketRegime, indicators: Dict, 
+                                     onchain=None, ai=None) -> EnhancedSignal:
         """FULL RISK MANAGEMENT LOGIC FROM ORIGINAL"""
         
         current_price = data['close'].iloc[-1]
         volatility = regime.volatility_value / 100
         atr = indicators['atr'].iloc[-1]
+        adx = indicators['adx'].iloc[-1] if 'adx' in indicators else 20.0
         
-        # 1. Calculate Stop Loss & TP
+        # 1. Calculate Stop Loss & TP (Passing ADX and Phase)
         risk_params = self.risk_manager.calculate_dynamic_levels(
             entry_price=current_price,
             atr=atr,
-            volatility=volatility,
-            trend_direction="long" if signal['direction'] == 'BUY' else "short",
-            regime_strength=regime.strength
+            volatility=regime.volatility, # Pass string state ('low', 'medium', 'high')
+            trend_direction="long" if signal['direction'] in ['BUY', 'STRONG_BUY'] else "short",
+            adx=adx,
+            phase=regime.phase,
+            crisis_mode=regime.crisis_mode
         )
         
         stop_loss = risk_params['stop_loss']

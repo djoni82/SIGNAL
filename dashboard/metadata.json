@@ -1,0 +1,7 @@
+{
+  "name": "QuantAI Unified Signal Bot",
+  "description": "A professional-grade cryptocurrency trading terminal with adaptive market regime detection, AI-enhanced signal generation using Gemini 3, and sophisticated risk management engines.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

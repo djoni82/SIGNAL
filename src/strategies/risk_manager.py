@@ -90,35 +90,71 @@ class DynamicRiskManager:
         }
 
     def calculate_dynamic_levels(self, entry_price: float, atr: float, volatility: float, 
-                                 trend_direction: str, **kwargs) -> Dict:
-        stop_dist = atr * (2.5 if volatility > 0.03 else 1.5)
-        min_stop = entry_price * 0.005
+                                 trend_direction: str, adx: float = 20.0, 
+                                 phase: str = 'markup', crisis_mode: bool = False, **kwargs) -> Dict:
+        """
+        Advanced dynamic level calculation ported from SignalPro Alpha.
+        Uses ADX for trend tightening and Market Phase for buffers.
+        """
+        # 1. STOP-LOSS (SL) CALCULATION
+        # Base multiplier based on volatility state
+        if volatility == 'high':
+            base_multiplier = 3.2
+        elif volatility == 'medium':
+            base_multiplier = 2.4
+        else: # low
+            base_multiplier = 1.8
+            
+        if crisis_mode:
+            base_multiplier = 4.5
+
+        # Trend tightening based on ADX (stronger trend = tighter stops)
+        trend_tightening = 0.85 if adx > 30 else (0.95 if adx > 20 else 1.15)
         
+        # Phase buffer (wider stops during accumulation/distribution)
+        phase_buffer = 1.2 if phase in ['accumulation', 'distribution'] else 1.0
+        if crisis_mode:
+            phase_buffer *= 1.4
+
+        final_sl_multiplier = base_multiplier * trend_tightening * phase_buffer
+        stop_dist = atr * final_sl_multiplier
+        
+        # Minimum stop loss (0.5%)
+        min_stop = entry_price * 0.005
         stop_distance = max(min_stop, stop_dist)
         
-        # Determine TP multipliers based on volatility (Original ProductionAIEngine Logic)
-        if volatility > 0.03:
-            tp_multipliers = [1.5, 2.0, 2.5]
-        elif volatility > 0.015:
-            tp_multipliers = [2.0, 2.5, 3.0]
-        else:
-            tp_multipliers = [2.5, 3.0, 4.0]
+        is_long = trend_direction == 'long'
+        sl_price = entry_price - stop_distance if is_long else entry_price + stop_distance
 
-        if trend_direction == 'long':
-            stop_loss = entry_price - stop_distance
-            tp1 = entry_price + stop_distance * tp_multipliers[0]
-            tp2 = entry_price + stop_distance * tp_multipliers[1]
-            tp3 = entry_price + stop_distance * tp_multipliers[2]
-            take_profits = (tp1, tp2, tp3)
+        # 2. TAKE-PROFIT (TP) CALCULATION
+        # TP Expansion based on ADX
+        tp_expansion = 1.6 if adx > 35 else (1.2 if adx > 20 else 0.9)
+        if phase in ['markup', 'markdown']:
+            tp_expansion *= 1.25
+        
+        # Original 3-level TP logic but with expansion
+        tp1_dist = stop_distance * 1.5 * tp_expansion
+        tp2_dist = stop_distance * 3.0 * tp_expansion
+        tp3_dist = stop_distance * 6.0 * tp_expansion
+
+        if is_long:
+            tp1 = entry_price + tp1_dist
+            tp2 = entry_price + tp2_dist
+            tp3 = entry_price + tp3_dist
         else:
-            stop_loss = entry_price + stop_distance
-            tp1 = entry_price - stop_distance * tp_multipliers[0]
-            tp2 = entry_price - stop_distance * tp_multipliers[1]
-            tp3 = entry_price - stop_distance * tp_multipliers[2]
-            take_profits = (tp1, tp2, tp3)
+            tp1 = entry_price - tp1_dist
+            tp2 = entry_price - tp2_dist
+            tp3 = entry_price - tp3_dist
+            
+        take_profits = (tp1, tp2, tp3)
+        
+        # Trailing stop distance
+        trailing_stop_dist = atr * 1.6 * (2.5 if crisis_mode else 1.0)
             
         return {
-            'stop_loss': stop_loss,
+            'stop_loss': sl_price,
             'take_profit': take_profits,
-            'stop_loss_distance': stop_distance
+            'stop_loss_distance': stop_distance,
+            'trailing_stop_distance': trailing_stop_dist,
+            'risk_reward': (abs(tp2 - entry_price) / stop_distance)
         }

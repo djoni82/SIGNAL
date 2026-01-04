@@ -12,3 +12,4 @@ sqlalchemy
 aiosqlite
 scipy
 TA-Lib
+google-generativeai

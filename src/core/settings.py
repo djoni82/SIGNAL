@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     bingx_secret: str = ""
 
     # External APIs
+    gemini_api_key: str = 'ВАШ_GEMINI_API_KEY'
     dune_api_key: str = 'ВАШ_DUNE_API_KEY'
     dune_query_id: str = 'ВАШ_QUERY_ID'
     cryptopanic_api_key: str = 'ВАШ_CRYPTOPANIC_API_KEY'

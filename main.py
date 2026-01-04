@@ -7,6 +7,9 @@ import ccxt.async_support as ccxt
 from src.core.settings import settings
 from src.core.logging import setup_logging
 from src.services.notifier import Notifier
+from src.services.telegram import TelegramBot
+from src.services.api_server import run_api
+import threading
 from src.strategies.signal_generator import SignalGenerator
 from src.strategies.models import EnhancedSignal
 
@@ -16,11 +19,15 @@ logger = logging.getLogger(__name__)
 
 class Bot:
     def __init__(self):
+        self.settings = settings
         self.notifier = Notifier()
-        self.exchange_connector = None 
+        self.exchange_connector = None
         self.signal_generator = None
+        self.exchanges = {}
+        self.primary_exchange = None
         self.is_active = True # Controlled by Telegram
-        
+        self.is_running = False # Controlled by API/main loop
+
         # Link control callback
         self.notifier.telegram.set_control_callback(self.control_callback)
 
@@ -35,7 +42,7 @@ class Bot:
     async def initialize(self):
         logger.info("Initializing Bot...")
         self.exchanges = {}
-        
+
         # Binance
         if settings.binance_key:
             try:
@@ -93,45 +100,51 @@ class Bot:
         # Use Binance as primary for TA, or first available
         self.primary_exchange = self.exchanges.get('binance') or list(self.exchanges.values())[0]
         self.exchange_connector = self.primary_exchange # Backwards compatibility
-        
+
         self.signal_generator = SignalGenerator(self.primary_exchange)
         logger.info(f"Bot Initialized. Active Exchanges: {list(self.exchanges.keys())}")
+        self.is_running = True
 
     async def run_loop(self):
-        logger.info(f"Starting analysis loop for {len(settings.trading_pairs)} pairs...")
-        
+        logger.info(f"Starting analysis loop for {len(self.settings.trading_pairs)} pairs...")
+
         while True:
+            if not self.is_running:
+                logger.info("Bot is not running. Sleeping...")
+                await asyncio.sleep(10)
+                continue
+
             if not self.is_active:
                 await asyncio.sleep(5)
                 continue
 
             try:
-                for symbol in settings.trading_pairs:
-                    if not self.is_active: break 
+                for symbol in self.settings.trading_pairs:
+                    if not self.is_active: break
 
                     logger.info(f"Analyzing {symbol}...")
-                    
+
                     # 1. Arbitrage Check (Multi-Exchange)
                     await self._check_arbitrage(symbol)
 
                     # 2. Main Strategy Analysis (Primary Exchange)
                     multi_tf_data = await self._fetch_data(symbol)
-                    
+
                     if not multi_tf_data:
                         continue
-                        
+
                     signal: EnhancedSignal = await self.signal_generator.analyze_symbol(symbol, multi_tf_data)
-                    
+
                     if signal:
                         logger.info(f"Signal found for {symbol}: {signal.direction}")
                         formatted_msg = self._format_signal(signal)
                         await self.notifier.send_signal(formatted_msg)
-                    
-                    await asyncio.sleep(1) 
-                
-                logger.info(f"Loop finished. Sleeping for {settings.update_frequency}s")
-                await asyncio.sleep(settings.update_frequency)
-                
+
+                    await asyncio.sleep(1)
+
+                logger.info(f"Loop finished. Sleeping for {self.settings.update_frequency}s")
+                await asyncio.sleep(self.settings.update_frequency)
+
             except Exception as e:
                 logger.error(f"Error in main loop: {e}")
                 await self.notifier.send(f"⚠️ Bot Critical Error: {str(e)}")
@@ -140,7 +153,7 @@ class Bot:
     async def _check_arbitrage(self, symbol):
         """Fetches prices from all exchanges and checks for spreads"""
         prices = {}
-        
+
         for name, exchange in self.exchanges.items():
             try:
                 ticker = await exchange.fetch_ticker(symbol)
@@ -148,22 +161,22 @@ class Bot:
                     prices[name] = ticker['last']
             except Exception as e:
                 logger.warning(f"Failed to fetch {symbol} from {name}: {e}")
-        
+
         if len(prices) > 1:
             min_price = min(prices.values())
             max_price = max(prices.values())
             spread_pct = ((max_price - min_price) / min_price) * 100
-            
+
             log_msg = f"Prices for {symbol}: {prices} | Spread: {spread_pct:.2f}%"
             logger.info(log_msg)
-            
+
             if spread_pct > 1.0: # 1% Arbitrage threshold
                 await self.notifier.send_signal(f"⚡ <b>Arbitrage Opportunity!</b>\n{symbol}\nSpread: {spread_pct:.2f}%\n{prices}")
 
     async def _fetch_data(self, symbol):
         data = {}
         try:
-            for tf in settings.timeframes:
+            for tf in self.settings.timeframes:
                 ohlcv = await self.primary_exchange.fetch_ohlcv(symbol, timeframe=tf, limit=100)
                 if ohlcv:
                      import pandas as pd
@@ -197,12 +210,22 @@ async def main():
     bot = Bot()
     try:
         await bot.initialize()
-        
+
+        # Start Telegram
+        telegram_bot = TelegramBot(bot)
+
+        # Run everything
+        logger.info("Launching bot components...")
+
+        # Run API in a separate thread to keep it simple
+        api_thread = threading.Thread(target=run_api, args=(bot,), daemon=True)
+        api_thread.start()
+
         await asyncio.gather(
             bot.run_loop(),
-            bot.notifier.telegram.start_polling()
+            telegram_bot.poll()
         )
-        
+
     except KeyboardInterrupt:
         logger.info("Bot stopped by user.")
     except Exception as e:
