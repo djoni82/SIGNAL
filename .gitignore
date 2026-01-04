@@ -1,5 +1,6 @@
 # Конфиденциальные данные
 config.py
+!src/core/config.py
 *.key
 *.pem
 .env
