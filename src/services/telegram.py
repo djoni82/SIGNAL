@@ -11,16 +11,92 @@ class TelegramBot:
         self.chat_id = settings.telegram_chat_id
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
         self.session = None
+        self.running = False
+        self.bot_control_callback = None # Callback to control main bot (start/stop)
 
     async def _get_session(self):
         if self.session is None or self.session.closed:
-            # Disable SSL verification as per original code workaround
             self.session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False))
         return self.session
 
-    async def send_message(self, message: str, chat_id: str = None):
-        if not settings.enable_telegram or not settings.send_signals:
+    def set_control_callback(self, callback):
+        self.bot_control_callback = callback
+
+    async def start_polling(self):
+        """Starts the polling loop for handling updates"""
+        self.running = True
+        offset = 0
+        logger.info("Telegram polling started...")
+        
+        while self.running:
+            try:
+                session = await self._get_session()
+                async with session.get(f"{self.base_url}/getUpdates", params={'offset': offset, 'timeout': 30}) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        result = data.get('result', [])
+                        
+                        for update in result:
+                            offset = update['update_id'] + 1
+                            await self._process_update(update)
+                    else:
+                        logger.error(f"Telegram getUpdates error: {resp.status}")
+                        await asyncio.sleep(5)
+            except Exception as e:
+                logger.error(f"Polling error: {e}")
+                await asyncio.sleep(5)
+            
+            await asyncio.sleep(1)
+
+    async def stop(self):
+        self.running = False
+        await self.close()
+
+    async def _process_update(self, update):
+        message = update.get('message', {})
+        text = message.get('text', '')
+        chat_id = str(message.get('chat', {}).get('id', ''))
+
+        if not text: return
+
+        # Security check (allow only configured user or admin)
+        if chat_id != str(self.chat_id) and chat_id != str(settings.telegram_admin_chat_id):
+            logger.warning(f"Unauthorized command from {chat_id}: {text}")
             return
+
+        if text.startswith('/'):
+            await self._handle_command(text, chat_id)
+
+    async def _handle_command(self, command: str, chat_id: str):
+        cmd = command.split()[0]
+        
+        if cmd == '/start':
+            msg = "🤖 <b>Bot Started!</b>\nAnalyze loop is running."
+            if self.bot_control_callback:
+                self.bot_control_callback('start')
+            await self.send_message(msg, chat_id)
+            
+        elif cmd == '/stop':
+            msg = "🛑 <b>Bot Paused!</b>\nAnalysis loop stopped."
+            if self.bot_control_callback:
+                self.bot_control_callback('stop')
+            await self.send_message(msg, chat_id)
+            
+        elif cmd == '/status':
+            msg = "ℹ️ <b>Status</b>: Running\nMode: Multi-Strategy"
+            await self.send_message(msg, chat_id)
+            
+        elif cmd == '/help':
+            msg = (
+                "<b>Commands:</b>\n"
+                "/start - Start Bot\n"
+                "/stop - Pause Bot\n"
+                "/status - Check Status\n"
+            )
+            await self.send_message(msg, chat_id)
+
+    async def send_message(self, message: str, chat_id: str = None):
+        if not settings.enable_telegram: return
 
         target_chat_id = chat_id or self.chat_id
         session = await self._get_session()
@@ -39,7 +115,8 @@ class TelegramBot:
             logger.error(f"Telegram error: {e}")
 
     async def send_signal(self, formatted_signal: str):
-        await self.send_message(formatted_signal)
+        if settings.send_signals:
+            await self.send_message(formatted_signal)
 
     async def close(self):
         if self.session and not self.session.closed:

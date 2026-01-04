@@ -19,19 +19,28 @@ class Bot:
         self.notifier = Notifier()
         self.exchange_connector = None 
         self.signal_generator = None
+        self.is_active = True # Controlled by Telegram
         
+        # Link control callback
+        self.notifier.telegram.set_control_callback(self.control_callback)
+
+    def control_callback(self, action: str):
+        if action == 'start':
+            self.is_active = True
+            logger.info("Bot resumed via Telegram.")
+        elif action == 'stop':
+            self.is_active = False
+            logger.info("Bot paused via Telegram.")
+
     async def initialize(self):
         logger.info("Initializing Bot...")
         
-        # Initialize CCXT exchange (using Binance as default example)
-        # In a real scenario, you might want to load this from settings dynamically
         self.exchange_connector = ccxt.binance({
             'apiKey': settings.binance_key,
             'secret': settings.binance_secret,
             'enableRateLimit': True,
         })
         
-        # Initialize Signal Generator with exchange connector
         self.signal_generator = SignalGenerator(self.exchange_connector)
         logger.info("Bot Initialized.")
 
@@ -39,12 +48,15 @@ class Bot:
         logger.info(f"Starting analysis loop for {len(settings.trading_pairs)} pairs...")
         
         while True:
+            if not self.is_active:
+                await asyncio.sleep(5)
+                continue
+
             try:
                 for symbol in settings.trading_pairs:
+                    if not self.is_active: break # Stop mid-loop if paused
+
                     logger.info(f"Analyzing {symbol}...")
-                    
-                    # Fetch Data (Simplified fetch for refactor demonstration)
-                    # Ideally this should be in a separate DataManager class
                     multi_tf_data = await self._fetch_data(symbol)
                     
                     if not multi_tf_data:
@@ -57,7 +69,7 @@ class Bot:
                         formatted_msg = self._format_signal(signal)
                         await self.notifier.send_signal(formatted_msg)
                     
-                    await asyncio.sleep(1) # Small delay between pairs
+                    await asyncio.sleep(1) 
                 
                 logger.info(f"Loop finished. Sleeping for {settings.update_frequency}s")
                 await asyncio.sleep(settings.update_frequency)
@@ -71,6 +83,7 @@ class Bot:
         data = {}
         try:
             for tf in settings.timeframes:
+                # Basic fetch implementation
                 ohlcv = await self.exchange_connector.fetch_ohlcv(symbol, timeframe=tf, limit=100)
                 if ohlcv:
                      import pandas as pd
@@ -104,7 +117,13 @@ async def main():
     bot = Bot()
     try:
         await bot.initialize()
-        await bot.run_loop()
+        
+        # Run Polling and Analysis concurrently
+        await asyncio.gather(
+            bot.run_loop(),
+            bot.notifier.telegram.start_polling()
+        )
+        
     except KeyboardInterrupt:
         logger.info("Bot stopped by user.")
     except Exception as e:
