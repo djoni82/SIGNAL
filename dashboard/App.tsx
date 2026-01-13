@@ -1,26 +1,25 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { MarketSignal, SignalType, MarketRegimeType, VolatilityLevel, ChartDataPoint, PortfolioState, ArbitrageOpportunity, EnhancedSignal, MarketRegime, OnChainData, MarketData, AdaptiveIndicators } from './types';
+import { MarketSignal, SignalType, ChartDataPoint, PortfolioState, ArbitrageOpportunity, EnhancedSignal, MarketRegime, OnChainData, MarketData, AdaptiveIndicators } from './types';
 import SignalCard from './components/SignalCard';
 import MarketChart from './components/MarketChart';
 import PortfolioCard from './components/PortfolioCard';
 import ArbitragePanel from './components/ArbitragePanel';
 import RiskManager from './components/RiskManager';
 import { RealTimeAIEngine } from './services/RealTimeAIEngine';
-import { Sparkles, Zap, Activity, Terminal, Bot, ChevronRight, LayoutDashboard, Cpu, Globe, Repeat, AlertTriangle, ShieldCheck, RefreshCw, Cpu as CpuIcon, Clock, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { Sparkles, Zap, Activity, Terminal, Bot, ChevronRight, LayoutDashboard, Cpu, Globe, Repeat, AlertTriangle, ShieldCheck, RefreshCw, Cpu as CpuIcon, Clock, ArrowDownCircle, ArrowUpCircle, Network } from 'lucide-react';
+import { calculateADX, calculateATR, calculateEMA, calculateRSI, calculateTrendSlope, detectWyckoffPhase } from './utils/technicalIndicators';
+import { OnChainAnalyzer } from './services/OnChainAnalyzer';
 import BotControl from './components/BotControl';
 
-const SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "LINKUSDT", "AVAXUSDT", "ADAUSDT", "DOTUSDT"];
 const TIMEFRAMES = ["15M", "1H", "4H", "1D"];
 const SIGNAL_TYPES = ["ALL", ...Object.values(SignalType)];
-const REGIMES = ["ALL", ...Object.values(MarketRegimeType)];
-const VOLATILITIES = ["ALL", ...Object.values(VolatilityLevel)];
 
 const API_BASE = 'http://localhost:8000/api';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'signals' | 'arbitrage' | 'portfolio' | 'settings'>('dashboard');
-  const [selectedSignal] = useState<MarketSignal | null>(null);
+  const [selectedSignal, setSelectedSignal] = useState<MarketSignal | null>(null);
   const [enhancedSignal, setEnhancedSignal] = useState<EnhancedSignal | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -40,18 +39,21 @@ const App: React.FC = () => {
   // Filter state
   const [selectedType, setSelectedType] = useState<string>("ALL");
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>("1H");
-  const [selectedRegime, setSelectedRegime] = useState<string>("ALL");
-  const [selectedVolatility, setSelectedVolatility] = useState<string>("ALL");
+  const [selectedRegime] = useState<string>("ALL");
+  const [selectedVolatility] = useState<string>("ALL");
 
-  const portfolio: PortfolioState = useMemo(() => ({
-    totalValue: 12450.85,
-    dailyPnL: 342.12,
-    dailyChangePercent: 2.82,
-    positions: [
-      { asset: 'BTC', amount: 0.15, entryPrice: 62000, currentPrice: 64100 },
-      { asset: 'SOL', amount: 25, entryPrice: 138, currentPrice: 145.5 }
-    ]
-  }), []);
+  const [portfolio, setPortfolio] = useState<PortfolioState>({
+    totalValue: 0,
+    dailyPnL: 0,
+    dailyChangePercent: 0,
+    positions: []
+  });
+
+  const [botStats, setBotStats] = useState({
+    winRate: 0,
+    totalSignals: 0,
+    onChainScore: 'N/A'
+  });
 
   const fetchKlines = async (symbol: string, interval: string = '1h', limit: number = 100): Promise<MarketData[]> => {
     const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval.toLowerCase()}&limit=${limit}`);
@@ -100,16 +102,45 @@ const App: React.FC = () => {
 
       setSignals(newSignals);
 
-      // Still fetch some mock/real binance data for charts if empty
-      if (newSignals.length > 0) {
-        const primary = newSignals[0];
-        setChartData(prev => {
-          const newData = [...prev, {
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-            price: primary.price
-          }];
-          return newData.slice(-20);
+      setSignals(newSignals);
+
+      // 2. Fetch Portfolio
+      const portResponse = await fetch(`${API_BASE}/portfolio`);
+      if (portResponse.ok) {
+        const portData = await portResponse.json();
+        setPortfolio({
+          totalValue: portData.total_value,
+          dailyPnL: portData.daily_pnl,
+          dailyChangePercent: portData.daily_change_percent,
+          positions: Object.entries(portData.assets).map(([asset, data]: [string, any]) => ({
+            asset,
+            amount: data.total,
+            entryPrice: 0, // Not available in current API
+            currentPrice: 0 // Not available in current API
+          }))
         });
+      }
+
+      // 3. Fetch Stats
+      const statsResponse = await fetch(`${API_BASE}/stats`);
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json();
+        setBotStats({
+          winRate: statsData.win_rate,
+          totalSignals: statsData.total_signals,
+          onChainScore: statsData.on_chain_score
+        });
+      }
+
+      // 4. Fetch Market History for Chart
+      const chartSymbol = newSignals.length > 0 ? newSignals[0].asset : 'BTC/USDT';
+      const histResponse = await fetch(`${API_BASE}/market/history?symbol=${chartSymbol.replace('/', '_')}`);
+      if (histResponse.ok) {
+        const histData = await histResponse.json();
+        setChartData(histData.map((d: any) => ({
+          time: new Date(d.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          price: d.close
+        })));
       }
 
       setLastSync(new Date().toLocaleTimeString());
@@ -239,7 +270,7 @@ const App: React.FC = () => {
                 </div>
                 <div className="text-center">
                   <p className="text-[7px] font-black text-slate-400 uppercase tracking-wider">Win Rate</p>
-                  <p className="text-xs font-black text-slate-900">72.4%</p>
+                  <p className="text-xs font-black text-slate-900">{botStats.winRate}%</p>
                 </div>
               </div>
               <div className="bg-white p-4 rounded-[1.5rem] border border-gray-100 flex flex-col items-center gap-2 shadow-sm">
@@ -248,7 +279,7 @@ const App: React.FC = () => {
                 </div>
                 <div className="text-center">
                   <p className="text-[7px] font-black text-slate-400 uppercase tracking-wider">On-Chain</p>
-                  <p className="text-xs font-black text-slate-900">High Score</p>
+                  <p className="text-xs font-black text-slate-900">{botStats.onChainScore} Score</p>
                 </div>
               </div>
             </div>

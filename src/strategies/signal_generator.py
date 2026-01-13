@@ -35,15 +35,20 @@ class SignalGenerator:
         
         self.signal_cache = {}
 
-    async def analyze_symbol(self, symbol: str, multi_tf_data: Dict[str, pd.DataFrame]) -> Optional[EnhancedSignal]:
-        if symbol in self.signal_cache:
-            last_sig, last_time = self.signal_cache[symbol]
+    async def analyze_symbol(self, symbol: str, multi_tf_data: Dict[str, pd.DataFrame], target_timeframe: str = None) -> Optional[EnhancedSignal]:
+        """Analyze symbol for a specific timeframe. If no target_timeframe specified, use primary_timeframe."""
+        
+        # Use target timeframe or fall back to primary
+        timeframe = target_timeframe or self.config.primary_timeframe
+        cache_key = f"{symbol}_{timeframe}"
+        
+        if cache_key in self.signal_cache:
+            last_sig, last_time = self.signal_cache[cache_key]
             if (datetime.now() - last_time).total_seconds() < self.config.signal_cooldown_minutes * 60:
                 return None
 
         try:
-            primary_tf = self.config.primary_timeframe
-            primary_data = multi_tf_data.get(primary_tf)
+            primary_data = multi_tf_data.get(timeframe)
             
             if primary_data is None or len(primary_data) < 100: return None
 
@@ -79,17 +84,25 @@ class SignalGenerator:
 
             # 9. Combine
             combined = self._combine_signals(ta_signal, ml_prob, validation, regime, features, ai_synthesis)
-            if combined['confidence'] < self.config.min_confidence: return None
+            
+            # Diagnostic: Log near-miss signals
+            if combined['confidence'] < self.config.min_confidence:
+                logger.info(
+                    f"[NEAR-MISS] {symbol} ({timeframe}): Confidence {combined['confidence']:.2f} < Threshold {self.config.min_confidence} | "
+                    f"Direction: {combined['direction']}, TA: {ta_signal['confidence']:.2f}, "
+                    f"BuyScore: {ta_signal.get('buy_score', 0):.1f}, SellScore: {ta_signal.get('sell_score', 0):.1f}"
+                )
+                return None
 
             # 10. Risk Management (FULL CALCULATION)
             final_signal = await self._apply_risk_management(
-                symbol, combined, primary_data, regime, indicators, onchain_data, ai_synthesis
+                symbol, combined, primary_data, regime, indicators, onchain_data, ai_synthesis, timeframe
             )
             
-            self.signal_cache[symbol] = (final_signal, datetime.now())
+            self.signal_cache[cache_key] = (final_signal, datetime.now())
             return final_signal
         except Exception as e:
-            logger.exception(f"Signal Gen Error {symbol}: {e}")
+            logger.exception(f"Signal Gen Error {symbol} ({timeframe}): {e}")
             return None
 
     def _generate_ta_signal(self, data: pd.DataFrame, indicators: Dict, oversold: int, overbought: int) -> Dict:
@@ -98,21 +111,73 @@ class SignalGenerator:
         buy_score, sell_score = 0, 0
         confidence = 0.0
         
-        if current_rsi < oversold: buy_score += 2; confidence += 0.2
-        elif current_rsi > overbought: sell_score += 2; confidence += 0.2
+        # 1. RSI Signal (weighted lower to allow trend-following)
+        if current_rsi < oversold: 
+            buy_score += 1.5
+            confidence += 0.15
+        elif current_rsi > overbought: 
+            sell_score += 1.5
+            confidence += 0.15
         
-        if indicators['ema_cross'].iloc[-1]: buy_score += 1
-        else: sell_score += 1
-        confidence += 0.15
+        # 2. EMA Cross (critical trend indicator)
+        if indicators['ema_cross'].iloc[-1]: 
+            buy_score += 2
+            confidence += 0.2
+        else: 
+            sell_score += 2
+            confidence += 0.2
         
-        if indicators['macd_hist'].iloc[-1] > 0: buy_score += 1
-        else: sell_score += 1
+        # 3. MACD Histogram
+        macd_hist = indicators['macd_hist'].iloc[-1]
+        if macd_hist > 0: 
+            buy_score += 1
+            confidence += 0.1
+        elif macd_hist < 0:
+            sell_score += 1
+            confidence += 0.1
         
-        direction = 'BUY' if buy_score >= 3 and buy_score > sell_score else 'SELL' if sell_score >= 3 else 'NEUTRAL'
-        if direction == 'NEUTRAL': confidence = 0.3
-        else: confidence = min(0.9, confidence + abs(buy_score - sell_score)*0.05)
+        # 4. ADX (trend strength) - NEW
+        adx = indicators.get('adx', pd.Series([0])).iloc[-1]
+        if adx > 25:  # Strong trend
+            confidence += 0.15
+            # Add to the dominant direction
+            if buy_score > sell_score:
+                buy_score += 1
+            else:
+                sell_score += 1
         
-        return {'direction': direction, 'confidence': confidence, 'buy_score': buy_score, 'sell_score': sell_score}
+        # 5. Bollinger Bands (volatility breakout) - NEW
+        bb_upper = indicators['bb_upper'].iloc[-1]
+        bb_lower = indicators['bb_lower'].iloc[-1]
+        if current_price <= bb_lower:
+            buy_score += 1.5
+            confidence += 0.12
+        elif current_price >= bb_upper:
+            sell_score += 1.5
+            confidence += 0.12
+        
+        # Direction determination (lowered threshold from 3 to 2.5)
+        total_buy = buy_score
+        total_sell = sell_score
+        
+        if total_buy >= 2.5 and total_buy > total_sell:
+            direction = 'BUY'
+        elif total_sell >= 2.5 and total_sell > total_buy:
+            direction = 'SELL'
+        else:
+            direction = 'NEUTRAL'
+            confidence = 0.35  # Slightly higher neutral confidence
+        
+        if direction != 'NEUTRAL':
+            # Boost confidence based on score difference
+            confidence = min(0.92, confidence + abs(total_buy - total_sell) * 0.06)
+        
+        return {
+            'direction': direction, 
+            'confidence': confidence, 
+            'buy_score': total_buy, 
+            'sell_score': total_sell
+        }
 
     def _combine_signals(self, ta, ml, val, reg, feat, ai=None) -> Dict:
         base_conf = ta['confidence']
@@ -121,11 +186,12 @@ class SignalGenerator:
         if ml > 0.7: base_conf *= 1.2
         elif ml < 0.3: base_conf *= 0.8
         
-        # AI Neural Synthesis Weighting (Gemini)
-        if ai and 'confidence' in ai:
-            # Weighted consensus: 65% TA/ML + 35% AI/On-Chain
-            ai_conf = ai['confidence'] # 0.0 to 1.0 from Gemini
-            base_conf = (base_conf * 0.65) + (ai_conf * 0.35)
+        # AI Neural Synthesis Weighting (Gemini) - OPTIONAL
+        if ai and isinstance(ai, dict) and 'confidence' in ai:
+            # Weighted consensus: 60% TA/ML + 40% AI/On-Chain (when available)
+            ai_conf = ai['confidence']  # 0.0 to 1.0 from Gemini
+            base_conf = (base_conf * 0.60) + (ai_conf * 0.40)
+        # If AI is unavailable, rely fully on TA/ML
 
         base_conf += val.get('confidence_boost', 0)
         if feat.get('volume_ratio', 1) > 1.8: base_conf *= 1.05
@@ -144,7 +210,7 @@ class SignalGenerator:
 
     async def _apply_risk_management(self, symbol: str, signal: Dict, data: pd.DataFrame, 
                                      regime: MarketRegime, indicators: Dict, 
-                                     onchain=None, ai=None) -> EnhancedSignal:
+                                     onchain=None, ai=None, timeframe: str = '1h') -> EnhancedSignal:
         """FULL RISK MANAGEMENT LOGIC FROM ORIGINAL"""
         
         current_price = data['close'].iloc[-1]
@@ -203,7 +269,7 @@ class SignalGenerator:
             position_size_pct=pos_info['position_size_pct'],
             expected_value=expected_value / current_price * 100, 
             risk_reward=risk_reward,
-            timeframe=self.config.primary_timeframe,
+            timeframe=timeframe,  # Use the actual analyzed timeframe
             rationale={
                 'ta_score': signal['ta_confidence'],
                 'ml_probability': signal['ml_probability'],

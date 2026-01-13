@@ -1,0 +1,20 @@
+[Unit]
+Description=SignalPro Trading Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zhakhongirkuliboev
+WorkingDirectory=/Users/zhakhongirkuliboev/SIGNAL
+ExecStart=/Users/zhakhongirkuliboev/SIGNAL/.venv/bin/python /Users/zhakhongirkuliboev/SIGNAL/main.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/Users/zhakhongirkuliboev/SIGNAL/bot.log
+StandardError=append:/Users/zhakhongirkuliboev/SIGNAL/bot_error.log
+
+# Environment
+Environment="PATH=/Users/zhakhongirkuliboev/SIGNAL/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+
+[Install]
+WantedBy=multi-user.target

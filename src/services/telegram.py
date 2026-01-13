@@ -110,7 +110,9 @@ class TelegramBot:
                 "parse_mode": "HTML"
             }
             async with session.post(url, json=payload) as response:
-                if response.status != 200:
+                if response.status == 200:
+                    logger.info(f"✅ Telegram message sent successfully to {target_chat_id}")
+                else:
                     logger.error(f"Telegram send failed: {await response.text()}")
         except Exception as e:
             logger.error(f"Telegram error: {e}")

@@ -1,0 +1,10 @@
+"""
+Test Suite for SignalPro Ultra
+Использует pytest для unit и integration тестов
+"""
+
+# Добавляем pytest и coverage в requirements
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0

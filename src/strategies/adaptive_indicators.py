@@ -89,6 +89,14 @@ class ImprovedAdaptiveIndicatorEngine:
             
         return rsi, oversold, overbought
 
+    def _calculate_atr_direct(self, data: pd.DataFrame, period: int = 14) -> pd.Series:
+        high_low = data['high'] - data['low']
+        high_close = np.abs(data['high'] - data['close'].shift())
+        low_close = np.abs(data['low'] - data['close'].shift())
+        ranges = pd.concat([high_low, high_close, low_close], axis=1)
+        true_range = np.max(ranges, axis=1)
+        return pd.Series(true_range).rolling(period).mean()
+
     def _calculate_rsi(self, series: pd.Series, period: int = 14) -> pd.Series:
         delta = series.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
