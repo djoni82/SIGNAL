@@ -57,8 +57,9 @@ class UltraSignalGenerator:
         self.signal_cache = {}
         
         # Ultra настройки
-        self.ULTRA_MIN_CONFIDENCE = 0.55  # Снижено до 55% для периода наблюдения
-        self.MIN_ADX_THRESHOLD = 15  # Снижено до 15 для теста (было 20)
+        self.ULTRA_MIN_CONFIDENCE = getattr(settings, 'ultra_min_confidence', 0.55)
+        self.MIN_ADX_THRESHOLD = 15
+        logger.info(f"🚀 [INIT] Ultra Mode active. Threshold: {self.ULTRA_MIN_CONFIDENCE:.2%}, ADX: {self.MIN_ADX_THRESHOLD}")
         
         # Валидация фич (критично для ML)
         self._validate_feature_consistency()
@@ -104,9 +105,8 @@ class UltraSignalGenerator:
                 'sma_20': 1.0,
                 'sma_50': 1.0,
                 'volume_ratio': 1.0,
-                'funding_rate': 0.0,
-                'liq_ratio': 1.0,
-                # 'arbitrage_spread': 0.0  <-- REMOVED to match model schema
+                'source': 'mock',
+                'is_mock': True
             }
             
             # Check for EXACT match with model expectations
@@ -156,7 +156,17 @@ class UltraSignalGenerator:
                     return sig
 
             # Manual Data Fetch & Conversion
-            ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=200)
+            try:
+                ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=200)
+            except Exception as e:
+                # Log once per symbol/error to avoid spam if possible, or just warning
+                # Check for "BadSymbol" or "does not have market symbol"
+                if "does not have market symbol" in str(e):
+                    logger.warning(f"⚠️ Exchange does not support {symbol}. Skipping.")
+                    return None
+                logger.warning(f"Failed to fetch data for {symbol}: {e}")
+                return None
+
             if not ohlcv or len(ohlcv) < 100:
                 return None
                 
@@ -254,7 +264,7 @@ class UltraSignalGenerator:
             if confidence < self.ULTRA_MIN_CONFIDENCE:
                 logger.info(
                     f"[ULTRA-FILTERED] {symbol} ({timeframe}): Conf={confidence:.2%} < {self.ULTRA_MIN_CONFIDENCE:.0%} | "
-                    f"TA={ta_score:.2f}, ML={ml_score:.2f}, SM={sm_boost:+.2f} ({sm_context.get('source', 'rest')})"
+                    f"TA={ta_score:.2f}, ML={ml_score:.2f}, SM={sm_boost:+.2f} ({sm_metrics.get('source', 'rest')})"
                 )
                 return None
 

@@ -85,8 +85,7 @@ class SmartMoneyAnalyzer:
                 'source': 'rest_api',
                 'is_mock': False
             }
-        except Exception as e:
-            logger.error(f"Error fetching REST metrics for {symbol}: {e}")
+        except Exception:
             return self._get_mock_funding()
 
     def _get_mock_funding(self) -> Dict:
@@ -94,7 +93,7 @@ class SmartMoneyAnalyzer:
             'current_funding': 0.0,
             'open_interest': 0.0,
             'long_short_ratio': 1.0,
-            'funding_trend': 'stable',
+            'source': 'mock',
             'is_mock': True
         }
 
@@ -136,25 +135,25 @@ class SmartMoneyAnalyzer:
         # === 2. DYNAMIC FUNDING RATE ANALYSIS ===
         funding = fund_data.get('current_funding', 0)
         
-        # Extreme funding (>1% or <-1%): Very strong contrarian signal
-        if funding > 0.01 and direction == 'SELL':
+        # Extreme funding (>0.5% or <-0.5%): Very strong contrarian signal
+        if funding > 0.005 and direction == 'SELL':
             score_boost += 0.15
             rationale['funding'] = 'EXTREME_OVERBOUGHT_FUNDING'
-        elif funding < -0.01 and direction == 'BUY':
+        elif funding < -0.005 and direction == 'BUY':
             score_boost += 0.15
             rationale['funding'] = 'EXTREME_OVERSOLD_FUNDING'
-        # Moderate funding (>0.03% or <-0.03%): Medium contrarian signal
-        elif funding > 0.0003 and direction == 'SELL':
+        # Moderate funding (>0.01% or <-0.01%): Medium contrarian signal
+        elif funding > 0.0001 and direction == 'SELL':
             score_boost += 0.08
             rationale['funding'] = 'MODERATE_OVERBOUGHT_FUNDING'
-        elif funding < -0.0003 and direction == 'BUY':
+        elif funding < -0.0001 and direction == 'BUY':
             score_boost += 0.08
             rationale['funding'] = 'MODERATE_OVERSOLD_FUNDING'
-        # Slight funding (>0.01% or <-0.01%): Weak contrarian signal
-        elif funding > 0.0001 and direction == 'SELL':
+        # Slight funding (>0.005% or <-0.005%): Weak contrarian signal
+        elif funding > 0.00005 and direction == 'SELL':
             score_boost += 0.03
             rationale['funding'] = 'SLIGHT_OVERBOUGHT_FUNDING'
-        elif funding < -0.0001 and direction == 'BUY':
+        elif funding < -0.00005 and direction == 'BUY':
             score_boost += 0.03
             rationale['funding'] = 'SLIGHT_OVERSOLD_FUNDING'
 

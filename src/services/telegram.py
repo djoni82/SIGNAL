@@ -24,29 +24,9 @@ class TelegramBot:
 
     async def start_polling(self):
         """Starts the polling loop for handling updates"""
-        self.running = True
-        offset = 0
-        logger.info("Telegram polling started...")
-        
-        while self.running:
-            try:
-                session = await self._get_session()
-                async with session.get(f"{self.base_url}/getUpdates", params={'offset': offset, 'timeout': 30}) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        result = data.get('result', [])
-                        
-                        for update in result:
-                            offset = update['update_id'] + 1
-                            await self._process_update(update)
-                    else:
-                        logger.error(f"Telegram getUpdates error: {resp.status}")
-                        await asyncio.sleep(5)
-            except Exception as e:
-                logger.error(f"Polling error: {e}")
-                await asyncio.sleep(5)
-            
-            await asyncio.sleep(1)
+        # [DISABLED] polling to avoid 409 Conflict with external instances
+        logger.info("Telegram polling is DISABLED. Bot can still SEND signals.")
+        return
 
     async def stop(self):
         self.running = False
@@ -96,8 +76,14 @@ class TelegramBot:
             )
             await self.send_message(msg, chat_id)
 
-    async def send_message(self, message: str, chat_id: str = None):
+    async def send_message(self, message: any, chat_id: str = None):
         if not settings.enable_telegram: return
+        
+        # Format message if it's a signal object
+        if hasattr(message, 'to_html'):
+            message = message.to_html()
+        else:
+            message = str(message)
 
         target_chat_id = chat_id or self.chat_id
         session = await self._get_session()
@@ -117,9 +103,9 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Telegram error: {e}")
 
-    async def send_signal(self, formatted_signal: str):
+    async def send_signal(self, signal_data: any):
         if settings.send_signals:
-            await self.send_message(formatted_signal)
+            await self.send_message(signal_data)
 
     async def close(self):
         if self.session and not self.session.closed:

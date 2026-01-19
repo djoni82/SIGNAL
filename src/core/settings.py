@@ -25,8 +25,8 @@ class Settings(BaseSettings):
     
     # Ultra Mode Settings (Real ML + Smart Money)
     use_ultra_mode: bool = True  # Set to True to enable Ultra Mode
-    ultra_min_confidence: float = 0.40  # Temporarily lowered to test signal delivery
-    ultra_shadow_mode: bool = True  # Test mode: generate signals but don't send to Telegram
+    ultra_min_confidence: float = 0.55  # Increased to 55% for higher quality signals
+    ultra_shadow_mode: bool = False  # Set to False to send signals to Telegram
     
     # Smart Money API Keys (optional, for advanced features)
     coinglass_api_key: str = ""  # https://www.coinglass.com/

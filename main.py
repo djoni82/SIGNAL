@@ -149,8 +149,8 @@ class Bot:
                         self.symbol_whitelist[name] = set(self.settings.trading_pairs)
                         
                 except Exception as e:
-                    logger.warning(f"⚠️ Initial load_markets failed for {name}: {e}. Using settings fallback.")
-                    # Fallback to user settings to prevent complete stall
+                    logger.warning(f"⚠️ Initial load_markets failed for {name}: {e}. using settings fallback.")
+                    # Explicitly set fallback so downstream logic doesn't fail
                     self.symbol_whitelist[name] = set(self.settings.trading_pairs)
             except Exception as e:
                 logger.error(f"Critical error in gateway setup for {name}: {e}")
@@ -299,17 +299,17 @@ class Bot:
                     
                     self.last_update_time[symbol] = now
 
-                    # Whitelist Check: Find matched symbol for primary exchange
-                    primary_name = None
-                    for n, ex in self.exchanges.items():
+                    # Get primary exchange name
+                    primary_name = 'binance'
+                    for name, ex in self.exchanges.items():
                         if ex == self.primary_exchange:
-                            primary_name = n
+                            primary_name = name
                             break
-                    
+                            
                     m_symbol, m_factor = self.find_matching_symbol(primary_name, symbol)
                     
                     if not m_symbol:
-                        logger.debug(f"Skipping {symbol} - No match found on {primary_name}")
+                        logger.warning(f"⏩ Skipping {symbol} - Not found on {primary_name}")
                         continue
 
                     effective_symbol = m_symbol
@@ -374,7 +374,7 @@ class Bot:
 
             try:
                 ticker = await exchange.fetch_ticker(m_symbol)
-                if ticker and 'last' in ticker:
+                if ticker and ticker.get('last') is not None:
                     # IMPORTANT: Normalize price by dividing by multiplier factor
                     prices[name] = ticker['last'] / m_factor
                     matched_symbols[name] = f"{m_symbol} (x{m_factor})" if m_factor > 1 else m_symbol
